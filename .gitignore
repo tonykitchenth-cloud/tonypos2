@@ -1,6 +1,6 @@
 node_modules/
 build/
-dist/
+# dist/ is tracked for GitHub Pages deployment
 coverage/
 .DS_Store
 *.log

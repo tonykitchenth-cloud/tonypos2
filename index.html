@@ -12,10 +12,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // 1. Single Page App redirect handler for GitHub Pages (restores path from 404.html)
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+        }
+      }(window.location));
+
+      // 2. Ensure trailing slash on GitHub Pages directory URLs so relative paths resolve correctly
+      if (!window.location.pathname.endsWith('/') && !window.location.pathname.includes('.')) {
+        window.history.replaceState(null, '', window.location.pathname + '/' + window.location.search + window.location.hash);
+      }
+    </script>
   </head>
   <body class="bg-[#F8F9FA] text-[#1A1A1A] antialiased selection:bg-[#E65100]/20 selection:text-[#E65100]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
