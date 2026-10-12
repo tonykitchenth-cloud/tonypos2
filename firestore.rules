@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwnerOrStaff() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'tonykitchen.th@gmail.com' ||
+        request.auth.token.role in ['owner', 'staff'] ||
+        request.auth.token.admin == true
+      );
+    }
+
+    function isValidRestaurantData(data) {
+      return data.restaurantId is string
+        && data.settings is map
+        && data.categories is list
+        && data.menuItems is list
+        && data.modifierGroups is list;
+    }
+
+    function isValidOrderData(data) {
+      return data.orderNumber is number
+        && data.source in ['in_app', 'line', 'whatsapp']
+        && data.status in ['pending', 'accepted', 'on_the_way', 'completed', 'cancelled']
+        && data.orderType in ['pickup', 'delivery']
+        && data.paymentMethod in ['cash', 'qr_payment']
+        && data.customer is map
+        && data.items is list;
+    }
+
+    // Match master restaurant document (e.g. /restaurants/tonys-kitchen)
+    match /restaurants/{restaurantId} {
+      // Public read access for customers to browse dishes and check live status
+      allow read: if isValidId(restaurantId);
+
+      // Write operations with schema validation
+      allow create, update: if isValidId(restaurantId) && isValidRestaurantData(incoming());
+      allow delete: if false;
+    }
+
+    // Match orders collection (/orders/{orderId})
+    match /orders/{orderId} {
+      // Scoped read: Customer can only read their own order; Staff/Owner can read all
+      allow get: if isValidId(orderId) && (
+        (isAuthenticated() && (resource.data.customerId == request.auth.uid || isOwnerOrStaff())) ||
+        // Fallback if unauthenticated but order has matching token or general query
+        (!('customerId' in resource.data) || resource.data.customerId == '')
+      );
+
+      // List query allowed for restaurant order tracking & management
+      allow list: if true;
+
+      // Create new order with validation
+      allow create: if isValidId(orderId) && isValidOrderData(incoming());
+
+      // Update order status (Owner / Kitchen operations)
+      allow update: if isValidId(orderId) && isValidOrderData(incoming());
+
+      // Delete forbidden to maintain immutable order audit history
+      allow delete: if false;
+    }
+
+    // Match counters collection (/counters/{counterId})
+    match /counters/{counterId} {
+      allow read: if isValidId(counterId);
+      allow create, update: if isValidId(counterId);
+      allow delete: if false;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

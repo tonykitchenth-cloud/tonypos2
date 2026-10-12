@@ -1,0 +1,6 @@
+{
+  "name": "Tony's Kitchen",
+  "description": "Mobile-first bilingual Thai restaurant ordering web application with custom options, live store hours, and instant WhatsApp & LINE handoff.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Central shared restaurant entity containing settings, categories, menu items, modifier groups, and store availability",
+      "type": "object",
+      "properties": {
+        "restaurantId": {
+          "type": "string",
+          "description": "Unique stable restaurant ID (e.g. tonys-kitchen)"
+        },
+        "settings": {
+          "type": "object",
+          "description": "Store settings, logo, name, phone, hours, holidays, notificationSound"
+        },
+        "categories": {
+          "type": "array",
+          "description": "List of categories with sortOrder, name EN/TH"
+        },
+        "menuItems": {
+          "type": "array",
+          "description": "List of menu items with name EN/TH, description, price, modifiers, imageUrl, availability"
+        },
+        "modifierGroups": {
+          "type": "array",
+          "description": "List of modifier groups and options with price and availability"
+        },
+        "version": {
+          "type": "number",
+          "description": "App state data schema version"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["restaurantId", "settings", "categories", "menuItems", "modifierGroups"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Real-time restaurant customer order document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Order ID" },
+        "orderNumber": { "type": "number", "description": "Human readable sequential number (e.g. 1024)" },
+        "orderNumberFormatted": { "type": "string", "description": "Display order number (e.g. #1024)" },
+        "source": { "type": "string", "enum": ["in_app", "line", "whatsapp"], "description": "Order placement source" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "on_the_way", "completed", "cancelled"], "description": "Live order status" },
+        "orderType": { "type": "string", "enum": ["pickup", "delivery"], "description": "Fulfillment method" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "qr_payment"], "description": "Payment type" },
+        "customer": { "type": "object", "description": "Customer name, phone, delivery address, notes" },
+        "items": { "type": "array", "description": "Immutable snapshot of ordered items with modifiers and prices" },
+        "subtotal": { "type": "number", "description": "Subtotal amount in THB" },
+        "total": { "type": "number", "description": "Total amount in THB" },
+        "currencySymbol": { "type": "string", "description": "Currency symbol (฿)" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "acceptedAt": { "type": "string", "description": "ISO timestamp when restaurant accepted order" },
+        "onTheWayAt": { "type": "string", "description": "ISO timestamp when order left for delivery" },
+        "completedAt": { "type": "string", "description": "ISO timestamp when order was delivered/picked up" }
+      },
+      "required": ["orderNumber", "source", "status", "orderType", "paymentMethod", "customer", "items", "total", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/restaurants/{restaurantId}": {
+      "schema": "Restaurant",
+      "description": "Master restaurant document accessed across customer and owner devices"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer order document synchronized in real-time"
+    },
+    "/counters/{counterId}": {
+      "description": "Atomic counters for sequential order numbers"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Central shared restaurant entity containing settings, categories, menu items, modifier groups, and store availability",
+      "type": "object",
+      "properties": {
+        "restaurantId": {
+          "type": "string",
+          "description": "Unique stable restaurant ID (e.g. tonys-kitchen)"
+        },
+        "settings": {
+          "type": "object",
+          "description": "Store settings, logo, name, phone, hours, holidays"
+        },
+        "categories": {
+          "type": "array",
+          "description": "List of categories with sortOrder, name EN/TH"
+        },
+        "menuItems": {
+          "type": "array",
+          "description": "List of menu items with name EN/TH, description, price, modifiers, imageUrl, availability"
+        },
+        "modifierGroups": {
+          "type": "array",
+          "description": "List of modifier groups and options with price and availability"
+        },
+        "version": {
+          "type": "number",
+          "description": "App state data schema version"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["restaurantId", "settings", "categories", "menuItems", "modifierGroups"]
+    }
+  },
+  "firestore": {
+    "/restaurants/{restaurantId}": {
+      "schema": "Restaurant",
+      "description": "Master restaurant document accessed across customer and owner devices"
+    }
+  }
+}

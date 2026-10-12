@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check valid image MIME type and size
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 5 * 1024 * 1024; // Max 5MB
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Public read for food menu images & restaurant logo
+    match /menu_images/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isValidImage();
+    }
+
+    match /logo/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isValidImage();
+    }
+
+    // Default deny for other directories
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

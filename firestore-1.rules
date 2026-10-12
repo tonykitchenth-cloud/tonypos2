@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global helper functions
+    function isValidRestaurantId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidRestaurantData(data) {
+      return data.restaurantId is string
+        && data.settings is map
+        && data.categories is list
+        && data.menuItems is list
+        && data.modifierGroups is list;
+    }
+
+    // Match master restaurant document (e.g. /restaurants/tonys-kitchen)
+    match /restaurants/{restaurantId} {
+      // Public read access for customers to browse dishes and check live status
+      allow read: if isValidRestaurantId(restaurantId);
+
+      // Write operations with schema validation
+      allow create, update: if isValidRestaurantId(restaurantId) && isValidRestaurantData(incoming());
+      allow delete: if false;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
