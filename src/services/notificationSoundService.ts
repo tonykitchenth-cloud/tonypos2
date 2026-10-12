@@ -26,8 +26,10 @@ const STORAGE_KEY_SOUND_ENABLED = 'tk_notification_sound_enabled';
 const STORAGE_KEY_AUDIO_UNLOCKED = 'tk_audio_unlocked';
 const STORAGE_KEY_SOUND_MUTED = 'tk_notification_sound_muted';
 
-const DEFAULT_SOUND_FILE = '/sounds/new-order.wav';
-const FALLBACK_SOUND_FILE = '/sounds/new-order.mp3';
+const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
+const DEFAULT_SOUND_FILE = `${baseUrl}/sounds/new-order.wav`;
+const FALLBACK_SOUND_FILE = `${baseUrl}/sounds/new-order.mp3`;
 const MIN_PLAY_INTERVAL_MS = 1400; // Cooldown to prevent deafening audio bursts when multiple orders arrive
 
 class NotificationSoundService {

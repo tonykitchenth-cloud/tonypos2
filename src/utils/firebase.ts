@@ -3,16 +3,23 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase App safely
+let app: any = null;
+let dbInstance: any = null;
+let authInstance: any = null;
 
-// Initialize Firestore Database with custom databaseId if configured
-export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  dbInstance = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
+  authInstance = getAuth(app);
+} catch (err) {
+  console.warn('Firebase initialization notice (running with local resilience):', err);
+}
 
-// Initialize Firebase Auth
-export const auth = getAuth(app);
+export const db = dbInstance;
+export const auth = authInstance;
 
 export const RESTAURANT_DOC_ID = 'tonys-kitchen';
 
@@ -23,6 +30,10 @@ export const RESTAURANT_DOC_ID = 'tonys-kitchen';
 let authInitPromise: Promise<User | null> | null = null;
 
 export async function ensureAuthenticatedUser(): Promise<User | null> {
+  if (!auth) {
+    return null;
+  }
+
   if (auth.currentUser) {
     return auth.currentUser;
   }

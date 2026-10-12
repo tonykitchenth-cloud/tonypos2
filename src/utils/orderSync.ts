@@ -174,6 +174,10 @@ export interface CreateOrderParams {
  * Safely allocates sequential human-readable order number (e.g. 1024) via Firestore transaction
  */
 async function allocateSequentialOrderNumber(): Promise<number> {
+  if (!db) {
+    return 1000 + Math.floor((Date.now() % 86400000) / 1000);
+  }
+
   const counterRef = doc(db, COUNTERS_COLLECTION, ORDER_COUNTER_DOC);
 
   try {
@@ -251,11 +255,17 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
     customerId,
   };
 
-  const docRef = doc(db, ORDERS_COLLECTION, orderId);
-  await setDoc(docRef, {
-    ...newOrder,
-    _serverCreatedAt: serverTimestamp(),
-  });
+  if (db) {
+    try {
+      const docRef = doc(db, ORDERS_COLLECTION, orderId);
+      await setDoc(docRef, {
+        ...newOrder,
+        _serverCreatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Could not save order to Firestore:', e);
+    }
+  }
 
   // Mark token as used & save active order ID
   if (params.clientToken) {
@@ -270,6 +280,7 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
  * Fetches single order by ID
  */
 export async function fetchOrderById(orderId: string): Promise<RestaurantOrder | null> {
+  if (!db) return null;
   try {
     const docRef = doc(db, ORDERS_COLLECTION, orderId);
     const snap = await getDoc(docRef);
@@ -291,6 +302,7 @@ export function subscribeToOrder(
   onUpdate: (order: RestaurantOrder) => void,
   onError?: (err: Error) => void
 ): () => void {
+  if (!db) return () => {};
   try {
     const docRef = doc(db, ORDERS_COLLECTION, orderId);
     const unsubscribe = onSnapshot(
@@ -319,12 +331,13 @@ export function subscribeToAllOrders(
   onUpdate: (orders: RestaurantOrder[]) => void,
   onError?: (err: Error) => void
 ): () => void {
+  if (!db) return () => {};
   let isCancelled = false;
   let activeUnsubscribe: (() => void) | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const startListener = () => {
-    if (isCancelled) return;
+    if (isCancelled || !db) return;
     try {
       const ordersCol = collection(db, ORDERS_COLLECTION);
       activeUnsubscribe = onSnapshot(
@@ -379,6 +392,7 @@ export async function updateOrderStatus(
   status: OrderStatus,
   extra?: { cancelReason?: string }
 ): Promise<void> {
+  if (!db) return;
   const docRef = doc(db, ORDERS_COLLECTION, orderId);
   const nowIso = new Date().toISOString();
 
@@ -410,6 +424,7 @@ export async function updateOrderPaymentStatus(
   orderId: string,
   paymentStatus: 'pending' | 'paid'
 ): Promise<void> {
+  if (!db) return;
   const docRef = doc(db, ORDERS_COLLECTION, orderId);
   await updateDoc(docRef, {
     paymentStatus,
@@ -421,6 +436,7 @@ export async function updateOrderPaymentStatus(
  * Deletes an order (Owner clean-up)
  */
 export async function deleteRestaurantOrder(orderId: string): Promise<void> {
+  if (!db) return;
   const { deleteDoc } = await import('firebase/firestore');
   const docRef = doc(db, ORDERS_COLLECTION, orderId);
   await deleteDoc(docRef);

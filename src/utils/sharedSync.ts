@@ -63,6 +63,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
  * Validates connection to Firestore on startup
  */
 export async function testConnection(): Promise<boolean> {
+  if (!db) return false;
   const path = `${RESTAURANT_COLLECTION}/${RESTAURANT_DOC_ID}`;
   try {
     const docRef = doc(db, RESTAURANT_COLLECTION, RESTAURANT_DOC_ID);
@@ -124,6 +125,7 @@ export function sanitizeAppState(data: any): AppStateData {
  * If the document does not exist yet, initializes it with existing default/demo state.
  */
 export async function getSharedRestaurantState(): Promise<AppStateData> {
+  if (!db) return defaultAppState;
   const path = `${RESTAURANT_COLLECTION}/${RESTAURANT_DOC_ID}`;
   try {
     const docRef = doc(db, RESTAURANT_COLLECTION, RESTAURANT_DOC_ID);
@@ -152,6 +154,7 @@ export async function getSharedRestaurantState(): Promise<AppStateData> {
  * Updates shared restaurant state on Firestore (real-time sync to all devices).
  */
 export async function updateSharedRestaurantState(state: AppStateData): Promise<void> {
+  if (!db) return;
   const path = `${RESTAURANT_COLLECTION}/${RESTAURANT_DOC_ID}`;
   try {
     const docRef = doc(db, RESTAURANT_COLLECTION, RESTAURANT_DOC_ID);
@@ -173,6 +176,7 @@ export function subscribeToSharedRestaurantState(
   onUpdate: (state: AppStateData) => void,
   onError?: (err: Error) => void
 ): () => void {
+  if (!db) return () => {};
   const path = `${RESTAURANT_COLLECTION}/${RESTAURANT_DOC_ID}`;
   try {
     const docRef = doc(db, RESTAURANT_COLLECTION, RESTAURANT_DOC_ID);
