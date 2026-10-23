@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { formatCurrency } from '../utils/pricing';
-import { X, Plus, Minus, Trash2, Edit3, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
+import { X, Plus, Minus, Trash2, Edit3, ShoppingBag, ArrowRight, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const CartDrawer: React.FC = () => {
@@ -47,6 +47,14 @@ export const CartDrawer: React.FC = () => {
     setIsCheckoutOpen(true);
   };
 
+  const handleBackToMenu = () => {
+    setIsCartOpen(false);
+    const categoryElem = document.getElementById('category-nav-bar');
+    if (categoryElem) {
+      categoryElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
@@ -63,9 +71,19 @@ export const CartDrawer: React.FC = () => {
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className="relative w-full max-w-md bg-[#F8F9FA] h-full flex flex-col shadow-2xl z-10 overflow-hidden"
         >
-          {/* Drawer Header */}
+          {/* Drawer Header with prominent Back to Menu and Close */}
           <div className="bg-white px-4 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                id="cart-back-to-menu-header-btn"
+                onClick={handleBackToMenu}
+                className="p-1.5 -ml-1.5 text-gray-500 hover:text-[#E65100] hover:bg-orange-50 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
+                title={t('backToMenuCategories')}
+                aria-label={t('backToMenuCategories')}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
               <ShoppingBag className="w-5 h-5 text-[#E65100]" />
               <h2 className="text-base font-extrabold text-[#1A1A1A]">
                 {t('yourCart')}
@@ -146,10 +164,12 @@ export const CartDrawer: React.FC = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsCartOpen(false)}
-                  className="mt-2 px-5 py-2.5 bg-[#1A1A1A] text-white text-xs font-extrabold rounded-full hover:bg-black transition-colors"
+                  id="cart-empty-browse-menu-btn"
+                  onClick={handleBackToMenu}
+                  className="mt-2 px-5 py-2.5 bg-[#1A1A1A] text-white text-xs font-extrabold rounded-full hover:bg-black transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  {t('startOrdering')}
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>{t('backToMenuCategories')}</span>
                 </button>
               </div>
             ) : (
@@ -270,6 +290,19 @@ export const CartDrawer: React.FC = () => {
                 );
               })
             )}
+
+            {/* Quick Add More Dishes Button inside the list */}
+            {cart.length > 0 && (
+              <button
+                type="button"
+                id="cart-list-add-more-btn"
+                onClick={handleBackToMenu}
+                className="w-full py-3 px-4 rounded-2xl border-2 border-dashed border-gray-200 hover:border-[#E65100]/40 hover:bg-orange-50/50 text-gray-700 hover:text-[#E65100] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer mt-1"
+              >
+                <Plus className="w-4 h-4 text-[#E65100]" />
+                <span>{t('backToMenuCategories')}</span>
+              </button>
+            )}
           </div>
 
           {/* Cart Footer */}
@@ -286,15 +319,27 @@ export const CartDrawer: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                id="proceed-checkout-btn"
-                onClick={handleProceedCheckout}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#E65100] text-white font-extrabold text-sm hover:bg-[#D84315] active:scale-[0.99] transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>{t('checkoutButton')}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  id="proceed-checkout-btn"
+                  onClick={handleProceedCheckout}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#E65100] text-white font-extrabold text-sm hover:bg-[#D84315] active:scale-[0.99] transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>{t('checkoutButton')}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  id="cart-back-to-menu-btn"
+                  onClick={handleBackToMenu}
+                  className="w-full py-2.5 px-4 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-[#1A1A1A] font-bold text-xs active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4 text-gray-500" />
+                  <span>{t('backToMenuCategories')}</span>
+                </button>
+              </div>
             </div>
           )}
         </motion.div>

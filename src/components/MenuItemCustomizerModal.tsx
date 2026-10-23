@@ -206,12 +206,12 @@ export const MenuItemCustomizerModal: React.FC = () => {
 
     if (isEditing) {
       updateCartItem(cartItemPayload);
+      handleClose();
+      setIsCartOpen(true);
     } else {
       addToCart(cartItemPayload);
+      handleClose();
     }
-
-    handleClose();
-    setIsCartOpen(true);
   };
 
   const primaryName = activeItem.name?.[language] || activeItem.name?.en || (typeof activeItem.name === 'string' ? activeItem.name : 'Dish');

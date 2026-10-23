@@ -28,7 +28,7 @@ export const CategoryNav: React.FC = () => {
   };
 
   return (
-    <div className="sticky top-[61px] z-30 bg-[#F8F9FA]/95 backdrop-blur-md py-2.5 border-b border-gray-200/60 shadow-2xs">
+    <div id="category-nav-bar" className="sticky top-[61px] z-30 bg-[#F8F9FA]/95 backdrop-blur-md py-2.5 border-b border-gray-200/60 shadow-2xs">
       <div className="max-w-4xl mx-auto px-4">
         <div
           ref={scrollContainerRef}

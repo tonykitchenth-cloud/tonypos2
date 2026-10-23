@@ -76,6 +76,8 @@ export const translations = {
     checkoutButton: "Proceed to Checkout",
     editItem: "Edit",
     removeItem: "Remove",
+    backToMenuCategories: "Back to Menu Categories",
+    addMoreItems: "Add More Items",
 
     // Checkout & Customer Profile
     checkoutTitle: "Complete Your Order",
@@ -429,6 +431,8 @@ export const translations = {
     checkoutButton: "ดำเนินการสั่งอาหาร",
     editItem: "แก้ไข",
     removeItem: "ลบ",
+    backToMenuCategories: "ย้อนกลับไปเลือกเมนูเพิ่ม",
+    addMoreItems: "เลือกเมนูเพิ่มเติม",
 
     // Checkout & Customer Profile
     checkoutTitle: "ยืนยันและสั่งอาหาร",
