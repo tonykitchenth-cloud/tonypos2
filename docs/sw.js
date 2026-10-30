@@ -1,12 +1,13 @@
 // Tony's Kitchen PWA Service Worker
-const CACHE_NAME = 'tonys-kitchen-v1';
+const CACHE_NAME = 'tonys-kitchen-v2';
 const PRECACHE_ASSETS = [
   './',
+  './manifest.json',
   './manifest.webmanifest',
-  './pwa-192x192.png',
-  './pwa-512x512.png',
-  './pwa-maskable-512x512.png',
+  './icon-192.png',
+  './icon-512.png',
   './apple-touch-icon.png',
+  './favicon-32.png',
   './icon.svg'
 ];
 
