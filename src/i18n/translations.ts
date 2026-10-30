@@ -79,6 +79,42 @@ export const translations = {
     backToMenuCategories: "Back to Menu Categories",
     addMoreItems: "Add More Items",
 
+    // PWA & Installation (Bilingual)
+    addToHomeScreen: "Add to Home Screen",
+    pwaHeroTitle: "Your favorite Thai food, just one tap away.",
+    pwaHeroDesc: "Add Tony's Kitchen to your home screen for quick and easy ordering.",
+    pwaFreeBadge: "Free. No App Store download required.",
+    pwaContinueOrdering: "Continue ordering without installing",
+    installAppBtn: "Install Tony's Kitchen",
+    howToInstallBtn: "How to Add to Home Screen",
+    
+    // LINE In-App Browser Guidance
+    lineBannerTitle: "Opened inside LINE",
+    lineBannerDesc: "Open in Safari or Chrome for full-screen ordering and home screen installation.",
+    lineOpenExternalBtn: "How to Open in Safari / Chrome",
+    lineModalTitle: "Open in External Browser",
+    lineModalDesc: "LINE's in-app browser has limited installation features. Open in your main browser for the best experience:",
+    lineStepIOS: "Tap '...' or Share icon at the bottom of LINE > Select 'Open in default browser' (Safari).",
+    lineStepAndroid: "Tap '⋮' at the top right of LINE > Select 'Open in default browser' (Chrome).",
+    
+    // iPhone / iPad Safari Guide
+    iosInstructionsTitle: "Install on iPhone / iPad",
+    iosInstructionsDesc: "Follow these quick steps in Safari to add Tony's Kitchen to your home screen:",
+    iosStep1: "1. Open Tony's Kitchen in Safari",
+    iosStep2: "2. Tap the Share button at the bottom of the screen",
+    iosStep3: "3. Scroll down and select 'Add to Home Screen'",
+    iosStep4: "4. Keep 'Open as Web App' enabled if available, then tap 'Add'",
+    
+    // Android Chrome Guide
+    androidInstructionsTitle: "Install on Android (Chrome)",
+    androidInstructionsDesc: "If the automatic prompt does not appear, follow these steps in Chrome:",
+    androidStep1: "1. Tap the three dots (⋮) menu at the top right of Chrome",
+    androidStep2: "2. Select 'Install app' or 'Add to Home screen'",
+    androidStep3: "3. Tap 'Install' to add Tony's Kitchen to your home screen",
+
+    dismissInstall: "Not Now",
+    offlineNotice: "You are offline. An active internet connection is required to submit orders.",
+
     // Checkout & Customer Profile
     checkoutTitle: "Complete Your Order",
     orderType: "Order Method",
@@ -433,6 +469,42 @@ export const translations = {
     removeItem: "ลบ",
     backToMenuCategories: "ย้อนกลับไปเลือกเมนูเพิ่ม",
     addMoreItems: "เลือกเมนูเพิ่มเติม",
+
+    // PWA & Installation (Bilingual)
+    addToHomeScreen: "เพิ่มไปยังหน้าจอโฮม",
+    pwaHeroTitle: "อาหารไทยจานโปรดของคุณ เพียงแตะครั้งเดียว",
+    pwaHeroDesc: "เพิ่ม Tony's Kitchen ไปที่หน้าจอหลักเพื่อการสั่งอาหารที่สะดวกรวดเร็ว",
+    pwaFreeBadge: "ฟรี ไม่มีค่าบริการ และไม่ต้องดาวน์โหลดจาก App Store",
+    pwaContinueOrdering: "สั่งอาหารต่อโดยไม่ติดตั้ง",
+    installAppBtn: "ติดตั้ง Tony's Kitchen",
+    howToInstallBtn: "วิธีเพิ่มลงหน้าจอหลัก",
+    
+    // LINE In-App Browser Guidance
+    lineBannerTitle: "คุณกำลังเปิดผ่าน LINE",
+    lineBannerDesc: "แนะนำให้เปิดใน Safari หรือ Chrome เพื่อการสั่งอาหารเต็มจอและติดตั้งลงหน้าจอมือถือ",
+    lineOpenExternalBtn: "วิธีเปิดใน Safari / Chrome",
+    lineModalTitle: "วิธีเปิดในเบราว์เซอร์หลักจาก LINE",
+    lineModalDesc: "เบราว์เซอร์ในแอป LINE มีข้อจำกัดในการติดตั้ง ให้เปิดผ่านเบราว์เซอร์หลักของเครื่องเพื่อประสบการณ์ที่ดีที่สุดครับ:",
+    lineStepIOS: "แตะปุ่ม '...' หรือไอคอนแชร์ที่แถบด้านล่างของ LINE > เลือก 'เปิดในเบราว์เซอร์เริ่มต้น' (Safari)",
+    lineStepAndroid: "แตะปุ่ม '⋮' ที่มุมขวาบนของ LINE > เลือก 'เปิดในเบราว์เซอร์อื่น' (Chrome)",
+    
+    // iPhone / iPad Safari Guide
+    iosInstructionsTitle: "วิธีติดตั้งบน iPhone / iPad",
+    iosInstructionsDesc: "ทำตามขั้นตอนง่ายๆ ใน Safari เพื่อเพิ่มไอคอนร้านไว้บนหน้าจอมือถือของคุณ:",
+    iosStep1: "1. เปิด Tony's Kitchen ในเบราว์เซอร์ Safari",
+    iosStep2: "2. แตะปุ่มแชร์ (Share) ที่แถบเมนูด้านล่างของหน้าจอ",
+    iosStep3: "3. เลื่อนลงแล้วแตะเลือก 'เพิ่มไปยังหน้าจอโฮม' (Add to Home Screen)",
+    iosStep4: "4. เปิด 'เปิดเป็นเว็บแอป' (ถ้ามี) แล้วแตะ 'เพิ่ม' (Add) ที่มุมขวาบน",
+    
+    // Android Chrome Guide
+    androidInstructionsTitle: "วิธีติดตั้งบน Android (Chrome)",
+    androidInstructionsDesc: "หากไม่มีหน้าต่างติดตั้งขึ้นอัตโนมัติ ให้ทำตามขั้นตอนนี้ใน Chrome:",
+    androidStep1: "1. แตะที่ปุ่มสามจุด (⋮) ที่มุมขวาบนของ Chrome",
+    androidStep2: "2. เลือก 'ติดตั้งแอป' หรือ 'เพิ่มลงในหน้าจอหลัก'",
+    androidStep3: "3. แตะ 'ติดตั้ง' เพื่อสร้างไอคอน Tony's Kitchen บนหน้าจอ",
+
+    dismissInstall: "ไว้คราวหลัง",
+    offlineNotice: "คุณกำลังออฟไลน์ — กรุณาเชื่อมต่ออินเทอร์เน็ตเพื่อส่งออเดอร์",
 
     // Checkout & Customer Profile
     checkoutTitle: "ยืนยันและสั่งอาหาร",

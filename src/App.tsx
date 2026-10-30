@@ -1,5 +1,7 @@
 import React from 'react';
 import { RestaurantProvider, useRestaurant } from './context/RestaurantContext';
+import { OfflineNotice } from './components/OfflineNotice';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { Header } from './components/Header';
 import { StoreBanner } from './components/StoreBanner';
 import { SearchBar } from './components/SearchBar';
@@ -57,8 +59,14 @@ const MainCustomerView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] flex flex-col selection:bg-[#E65100]/20 selection:text-[#E65100] pb-24">
+      {/* 0. Offline Network Indicator */}
+      <OfflineNotice />
+
       {/* 1. Header (Logo 5-tap trigger, Brand, Language Switcher, Profile, Fav, Cart) */}
       <Header />
+
+      {/* PWA Discreet Add to Home Screen Banner (suppressed during checkout/ordering modals) */}
+      {!isModalOrDrawerActive && <PWAInstallBanner />}
 
       {/* 2. Store Status Banner & Quick Contacts */}
       <StoreBanner />

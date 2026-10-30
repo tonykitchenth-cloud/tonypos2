@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { CustomerProfile, OrderType } from '../types';
-import { X, User, Phone, MapPin, Check, Save } from 'lucide-react';
+import { X, User, Phone, MapPin, Check, Save, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { usePWAInstall } from '../hooks/usePWAInstall';
+import { IOSInstallGuideModal } from './IOSInstallGuideModal';
+import { AndroidInstallGuideModal } from './AndroidInstallGuideModal';
+import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 
 export const CustomerProfileModal: React.FC = () => {
   const {
@@ -13,6 +17,19 @@ export const CustomerProfileModal: React.FC = () => {
     language,
     t,
   } = useRestaurant();
+
+  const {
+    isInstalled,
+    isIOS,
+    isAndroid,
+    isLineBrowser,
+    supportsNativePrompt,
+    installNativePrompt,
+  } = usePWAInstall();
+
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showAndroidGuide, setShowAndroidGuide] = useState(false);
+  const [showLineGuide, setShowLineGuide] = useState(false);
 
   const [name, setName] = useState<string>(customerProfile.name || '');
   const [phone, setPhone] = useState<string>(customerProfile.phone || '');
@@ -39,6 +56,25 @@ export const CustomerProfileModal: React.FC = () => {
     }, 1200);
   };
 
+  const handleInstallClick = async () => {
+    if (isLineBrowser) {
+      setShowLineGuide(true);
+      return;
+    }
+    if (isIOS) {
+      setShowIOSGuide(true);
+      return;
+    }
+    if (supportsNativePrompt) {
+      const outcome = await installNativePrompt();
+      if (outcome === 'unavailable') {
+        setShowAndroidGuide(true);
+      }
+      return;
+    }
+    setShowAndroidGuide(true);
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -46,7 +82,7 @@ export const CustomerProfileModal: React.FC = () => {
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative"
+          className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 overflow-hidden relative max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
@@ -100,7 +136,7 @@ export const CustomerProfileModal: React.FC = () => {
               />
             </div>
 
-            {/* Delivery Address */}
+            {/* Default Delivery Address */}
             <div>
               <label className="font-bold text-gray-700 block mb-1">
                 {t('deliveryAddress')}
@@ -115,7 +151,7 @@ export const CustomerProfileModal: React.FC = () => {
               />
             </div>
 
-            {/* Default Order Type */}
+            {/* Default Order Method */}
             <div>
               <label className="font-bold text-gray-700 block mb-1">
                 {t('orderType')}
@@ -123,8 +159,9 @@ export const CustomerProfileModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
+                  id="profile-method-pickup"
                   onClick={() => setOrderType('pickup')}
-                  className={`py-2 px-3 rounded-xl border font-bold text-center transition-all ${
+                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
                     orderType === 'pickup'
                       ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
                       : 'bg-gray-50 border-gray-200 text-gray-600'
@@ -134,8 +171,9 @@ export const CustomerProfileModal: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  id="profile-method-delivery"
                   onClick={() => setOrderType('delivery')}
-                  className={`py-2 px-3 rounded-xl border font-bold text-center transition-all ${
+                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
                     orderType === 'delivery'
                       ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
                       : 'bg-gray-50 border-gray-200 text-gray-600'
@@ -149,6 +187,19 @@ export const CustomerProfileModal: React.FC = () => {
             <p className="text-[10px] text-gray-400 text-center pt-1">
               {t('savedLocallyNotice')}
             </p>
+
+            {/* PWA Add to Home Screen Option */}
+            {!isInstalled && (
+              <button
+                type="button"
+                id="profile-install-pwa-btn"
+                onClick={handleInstallClick}
+                className="w-full py-2.5 px-3 rounded-2xl border border-orange-200 bg-orange-50/70 hover:bg-orange-100 text-[#E65100] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>{t('addToHomeScreen')}</span>
+              </button>
+            )}
 
             <button
               type="submit"
@@ -172,6 +223,21 @@ export const CustomerProfileModal: React.FC = () => {
               )}
             </button>
           </form>
+
+          {/* Modal Guides */}
+          <IOSInstallGuideModal
+            isOpen={showIOSGuide}
+            onClose={() => setShowIOSGuide(false)}
+          />
+          <AndroidInstallGuideModal
+            isOpen={showAndroidGuide}
+            onClose={() => setShowAndroidGuide(false)}
+          />
+          <LineBrowserGuideModal
+            isOpen={showLineGuide}
+            onClose={() => setShowLineGuide(false)}
+            isIOS={isIOS}
+          />
         </motion.div>
       </div>
     </AnimatePresence>
