@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { Heart, ShoppingBag, User, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { navigateTo } from '../utils/navigation';
 
 export const Header: React.FC = () => {
   const {
@@ -17,7 +18,7 @@ export const Header: React.FC = () => {
     t,
   } = useRestaurant();
 
-  // Hidden 5-tap owner trigger: 5 taps within 2.5 seconds
+  // Hidden 5-tap owner trigger: 5 taps within 2.5 seconds (backward compatible)
   const tapTimesRef = useRef<number[]>([]);
 
   const handleLogoTap = () => {
@@ -29,7 +30,7 @@ export const Header: React.FC = () => {
 
     if (recentTaps.length >= 5) {
       tapTimesRef.current = [];
-      setIsOwnerAccessModalOpen(true);
+      navigateTo('owner');
     }
   };
 

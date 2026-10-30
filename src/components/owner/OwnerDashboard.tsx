@@ -20,8 +20,10 @@ import { OwnerOrdersTab } from './OwnerOrdersTab';
 import { NewOrderAlertModal } from './NewOrderAlertModal';
 import { OwnerSoundSettingsCard } from './OwnerSoundSettingsCard';
 import { orderNotificationService } from '../../services/orderNotificationService';
+import { navigateTo } from '../../utils/navigation';
 import {
   X,
+  LogOut,
   LayoutDashboard,
   UtensilsCrossed,
   Tags,
@@ -460,15 +462,33 @@ export const OwnerDashboard: React.FC = () => {
           </div>
         </div>
 
-        <button
-          type="button"
-          id="exit-owner-mode-btn"
-          onClick={() => setIsOwnerMode(false)}
-          className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5"
-        >
-          <X className="w-4 h-4" />
-          <span>{t('closeOwnerMode')}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            id="owner-view-customer-site-btn"
+            onClick={() => {
+              navigateTo('customer');
+            }}
+            className="px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition-all cursor-pointer hidden sm:flex items-center gap-1.5"
+            title="View Public Customer Menu"
+          >
+            <span>{language === 'th' ? 'ดูหน้าสั่งอาหารลูกค้า' : 'Customer Menu'}</span>
+          </button>
+
+          <button
+            type="button"
+            id="exit-owner-mode-btn"
+            onClick={() => {
+              setIsOwnerMode(false);
+              navigateTo('owner');
+            }}
+            className="px-3.5 py-1.5 rounded-full bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title={language === 'th' ? 'ออกจากระบบเจ้าของร้าน' : 'Log Out of Owner Portal'}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>{language === 'th' ? 'ออกจากระบบ' : 'Log Out'}</span>
+          </button>
+        </div>
       </header>
 
       {/* Notification Toast */}

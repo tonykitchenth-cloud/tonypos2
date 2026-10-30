@@ -6,9 +6,13 @@
     <title>Tony's Kitchen</title>
     <script>
       // Single Page App redirect for GitHub Pages
-      // Stores requested URL path and redirects to root index.html
+      // Detect whether deployed on github.io with a repository subpath (keep 1 segment) or root domain (keep 0)
       sessionStorage.redirect = location.href;
-      var pathSegmentsToKeep = 0;
+      var isGitHubPagesSubpath = Boolean(
+        location.hostname.endsWith('github.io') &&
+        location.pathname.split('/').filter(Boolean).length >= 1
+      );
+      var pathSegmentsToKeep = isGitHubPagesSubpath ? 1 : 0;
       var l = window.location;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +

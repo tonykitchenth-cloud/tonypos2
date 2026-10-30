@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { RestaurantProvider, useRestaurant } from './context/RestaurantContext';
+import { AppRoute, getAppRoute } from './utils/navigation';
+import { OwnerLoginPage } from './components/owner/OwnerLoginPage';
 import { OfflineNotice } from './components/OfflineNotice';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { Header } from './components/Header';
@@ -147,15 +149,42 @@ const MainCustomerView: React.FC = () => {
       <CustomerProfileModal />
       <ClosedStoreModal />
       <OwnerAccessModal />
-      <OwnerDashboard />
     </div>
   );
+};
+
+const AppRouter: React.FC = () => {
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(() => getAppRoute());
+  const { isOwnerMode } = useRestaurant();
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentRoute(getAppRoute());
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
+
+  // 1. Dedicated Owner Dashboard Route (/owner)
+  if (currentRoute === 'owner') {
+    if (!isOwnerMode) {
+      return <OwnerLoginPage />;
+    }
+    return <OwnerDashboard />;
+  }
+
+  // 2. Public Customer Ordering Route (/)
+  return <MainCustomerView />;
 };
 
 export default function App() {
   return (
     <RestaurantProvider>
-      <MainCustomerView />
+      <AppRouter />
     </RestaurantProvider>
   );
 }
+
