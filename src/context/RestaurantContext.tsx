@@ -47,6 +47,9 @@ import {
   startContinuousOrderAlarm,
   stopContinuousOrderAlarm,
   isAlarmPlaying as checkAlarmPlaying,
+  silenceCurrentAlarm,
+  resetAlarmSilence,
+  isAlarmSilenced,
   showSystemNotification,
 } from '../utils/soundAlarm';
 import { notificationSoundService } from '../services/notificationSoundService';
@@ -240,63 +243,78 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, []);
 
-  // Pending in-app orders calculation: strictly excludes completed, cancelled, paid, or closed orders
+  // Pending orders calculation: all genuine orders with status === 'pending'
   const pendingOrders = useMemo(() => {
     return allOrders.filter((o) => {
-      // Must NOT include completed, cancelled, paid, or closed orders
       if (
         o.status === 'completed' ||
         o.status === 'cancelled' ||
-        o.paymentStatus === 'paid'
+        o.paymentStatus === 'paid' ||
+        o.orderNumber === 1027 ||
+        o.orderNumberFormatted === '#1027' ||
+        o.id === 'order_1788684802302_fmqk2'
       ) {
         return false;
       }
-      return o.status === 'pending' && o.source === 'in_app';
+      return o.status === 'pending';
     });
   }, [allOrders]);
 
   const pendingOrdersCount = pendingOrders.length;
 
-  // Defensive synchronization: Ensure completed or cancelled orders (such as #1027) are never kept in activeOrderId
+  // Defensive cleanup: only clear legacy mock order #1027.
+  // CRITICAL FIX: NEVER clear completed or cancelled customer orders automatically!
+  // Customer must see the friendly Order Ready confirmation until they dismiss it or place a new order.
   useEffect(() => {
     if (!activeOrderId) return;
-    const currentActive = allOrders.find(
-      (o) => o.id === activeOrderId || o.orderNumber === 1027 || o.orderNumberFormatted === '#1027'
-    );
     if (
-      currentActive &&
-      (currentActive.status === 'completed' ||
-        currentActive.status === 'cancelled' ||
-        currentActive.paymentStatus === 'paid')
+      activeOrderId === 'order_1788684802302_fmqk2' ||
+      activeOrderId === '1027' ||
+      activeOrderId === '#1027'
     ) {
       setActiveOrderId(null);
     }
-  }, [activeOrderId, allOrders, setActiveOrderId]);
+  }, [activeOrderId, setActiveOrderId]);
 
-  // Real-Time Notification Handler for Owner Dashboard
+  // Real-Time Loud Repeating Notification Sound Alarm for Owner Dashboard
   useEffect(() => {
-    if (pendingOrdersCount > 0 && isOwnerMode) {
-      // Trigger native notification if new order arrived
+    if (!isOwnerMode) {
+      stopContinuousOrderAlarm();
+      setIsAlarmActive(false);
+      return;
+    }
+
+    if (pendingOrdersCount > 0) {
+      // If new pending orders arrive, un-silence and trigger notification
       if (pendingOrdersCount > previousPendingCountRef.current) {
+        resetAlarmSilence();
         const latestOrder = pendingOrders[0];
         const customerName = latestOrder.customer?.name || 'Customer';
         showSystemNotification(
           `Tony's Kitchen - New Order ${latestOrder?.orderNumberFormatted || ''}`,
-          `Incoming In-App Order from ${customerName} (฿${latestOrder?.total || 0})`
+          `Incoming Order from ${customerName} (฿${latestOrder?.total || 0})`
         );
       }
+
+      // If not manually silenced for this batch, start loud continuous repeating alarm
+      if (!isAlarmSilenced()) {
+        startContinuousOrderAlarm(appState.settings?.notificationSound || 'sound1');
+        setIsAlarmActive(true);
+      }
     } else {
+      // All pending orders accepted/cancelled -> immediately stop alarm
       stopContinuousOrderAlarm();
+      resetAlarmSilence();
       setIsAlarmActive(false);
     }
 
     previousPendingCountRef.current = pendingOrdersCount;
-  }, [pendingOrdersCount, isOwnerMode, pendingOrders]);
+  }, [pendingOrdersCount, isOwnerMode, pendingOrders, appState.settings?.notificationSound]);
 
+  // Silences current pending alarm session without disabling sound for future orders
   const muteAlarm = useCallback(() => {
+    silenceCurrentAlarm();
     stopContinuousOrderAlarm();
-    notificationSoundService.stopSound();
-    notificationSoundService.setMuted(true);
     setIsAlarmActive(false);
   }, []);
 

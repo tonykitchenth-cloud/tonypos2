@@ -13,6 +13,7 @@
 
 import { RestaurantOrder } from '../types';
 import { notificationSoundService } from './notificationSoundService';
+import { resetAlarmSilence } from '../utils/soundAlarm';
 
 export type NewOrderCallback = (newOrders: RestaurantOrder[]) => void;
 
@@ -117,6 +118,7 @@ class OrderNotificationService {
 
     if (genuinelyNewOrders.length > 0) {
       this.persistNotifiedIds();
+      resetAlarmSilence();
       // Play sound once for this arrival
       notificationSoundService.playNewOrderSound().catch((err) => {
         console.warn('[OrderNotificationService] Sound playback error:', err);
@@ -154,6 +156,7 @@ class OrderNotificationService {
     this.persistNotifiedIds();
 
     if (this.isOwnerAuthenticated) {
+      resetAlarmSilence();
       notificationSoundService.playNewOrderSound().catch((err) => {
         console.warn('[OrderNotificationService] Sound playback error:', err);
       });

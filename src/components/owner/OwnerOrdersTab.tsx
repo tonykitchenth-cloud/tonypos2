@@ -15,6 +15,7 @@ import {
 } from '../../utils/orderSync';
 import {
   playNotificationSound,
+  unlockAudioContext,
   requestNotificationPermission,
 } from '../../utils/soundAlarm';
 import {
@@ -89,6 +90,7 @@ export const OwnerOrdersTab: React.FC = () => {
   };
 
   const handleEnableAudioAndNotifications = async () => {
+    await unlockAudioContext();
     playNotificationSound(currentSound);
     const perm = await requestNotificationPermission();
     setNotificationStatus(perm === 'granted' ? 'granted' : 'denied');
@@ -99,8 +101,8 @@ export const OwnerOrdersTab: React.FC = () => {
     try {
       setIsUpdatingStatus(orderId);
       await updateOrderStatus(orderId, newStatus, reason ? { cancelReason: reason } : undefined);
-      // Mute continuous alarm if user accepted/cancelled
-      muteAlarm();
+      // NOTE: Do not call muteAlarm() here. If other pending orders remain, the alarm continues!
+      // If no pending orders remain, RestaurantContext's snapshot listener automatically stops the alarm.
       if (cancellingOrderId === orderId) {
         setCancellingOrderId(null);
         setCancelReason('');

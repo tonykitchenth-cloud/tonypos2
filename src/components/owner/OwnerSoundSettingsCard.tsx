@@ -16,6 +16,7 @@ import {
   SoundStatusDetail,
 } from '../../services/notificationSoundService';
 import { orderNotificationService } from '../../services/orderNotificationService';
+import { setMasterVolume } from '../../utils/soundAlarm';
 
 interface OwnerSoundSettingsCardProps {
   language: Language;
@@ -115,6 +116,15 @@ export const OwnerSoundSettingsCard: React.FC<OwnerSoundSettingsCardProps> = ({
         : isThai
           ? 'เปิดเสียง (Unmuted)'
           : 'Notification sound UNMUTED',
+      type: 'info',
+    });
+  };
+
+  const handleSetVolume = (vol: number) => {
+    notificationSoundService.setVolume(vol);
+    setMasterVolume(vol);
+    setFeedbackMessage({
+      text: isThai ? `ตั้งค่าระดับเสียง: ${Math.round(vol * 100)}%` : `Volume set to ${Math.round(vol * 100)}%`,
       type: 'info',
     });
   };
@@ -306,6 +316,39 @@ export const OwnerSoundSettingsCard: React.FC<OwnerSoundSettingsCardProps> = ({
                 <VolumeX className="w-3.5 h-3.5" />
                 <span>{isThai ? '🔇 ปิดเสียง' : '🔇 Sound Off'}</span>
               </button>
+            </div>
+          </div>
+
+          {/* Volume Level Controls */}
+          <div className="pt-2 border-t border-gray-200 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-600 font-medium">
+                {isThai ? 'ระดับความดังเสียง (Volume)' : 'Alert Volume'}
+              </span>
+              <span className="font-mono font-bold text-gray-700">
+                {Math.round((soundStatus.volume ?? 1.0) * 100)}%
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { label: isThai ? 'ดังมาก (100%)' : 'High (100%)', val: 1.0 },
+                { label: isThai ? 'ปานกลาง (70%)' : 'Med (70%)', val: 0.7 },
+                { label: isThai ? 'เบา (40%)' : 'Low (40%)', val: 0.4 },
+              ].map((lvl) => (
+                <button
+                  key={lvl.val}
+                  type="button"
+                  id={`volume-level-${Math.round(lvl.val * 100)}`}
+                  onClick={() => handleSetVolume(lvl.val)}
+                  className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    Math.abs((soundStatus.volume ?? 1.0) - lvl.val) < 0.1
+                      ? 'bg-[#E65100] text-white shadow-xs'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  {lvl.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>

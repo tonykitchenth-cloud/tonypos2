@@ -20,6 +20,7 @@ import { OwnerOrdersTab } from './OwnerOrdersTab';
 import { NewOrderAlertModal } from './NewOrderAlertModal';
 import { OwnerSoundSettingsCard } from './OwnerSoundSettingsCard';
 import { orderNotificationService } from '../../services/orderNotificationService';
+import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo, getLogoUrl } from '../../utils/navigation';
 import {
   X,
@@ -463,6 +464,32 @@ export const OwnerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Quick Audio Test & Unlock Button */}
+          <button
+            type="button"
+            id="owner-header-sound-btn"
+            onClick={async () => {
+              await unlockAudioContext();
+              playNotificationSound(settings.notificationSound || 'sound1');
+              showToast(
+                language === 'th'
+                  ? '🔔 เปิดและทดสอบระบบเสียงแจ้งเตือนแล้ว'
+                  : '🔔 Notification sound primed and tested!'
+              );
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              isAlarmActive
+                ? 'bg-red-500 text-white animate-bounce shadow-md shadow-red-500/30'
+                : 'bg-white/10 hover:bg-white/20 text-yellow-300'
+            }`}
+            title={language === 'th' ? 'เปิด / ทดสอบเสียงแจ้งเตือนออเดอร์' : 'Enable / Test Order Sound'}
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">
+              {language === 'th' ? 'เสียงแจ้งเตือน' : 'Sound Alert'}
+            </span>
+          </button>
+
           <button
             type="button"
             id="owner-view-customer-site-btn"

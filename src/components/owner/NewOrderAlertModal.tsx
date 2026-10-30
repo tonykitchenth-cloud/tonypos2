@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { notificationSoundService } from '../../services/notificationSoundService';
+import { silenceCurrentAlarm, resetAlarmSilence } from '../../utils/soundAlarm';
 
 interface NewOrderAlertModalProps {
   orders: RestaurantOrder[];
@@ -43,6 +44,11 @@ export const NewOrderAlertModal: React.FC<NewOrderAlertModalProps> = ({
   const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
     const newMuted = !isMuted;
+    if (newMuted) {
+      silenceCurrentAlarm();
+    } else {
+      resetAlarmSilence();
+    }
     notificationSoundService.setMuted(newMuted);
     setIsMuted(newMuted);
   };

@@ -16,6 +16,7 @@ export interface SoundStatusDetail {
   isUnlocked: boolean;
   isEnabled: boolean;
   isMuted: boolean;
+  volume: number;
   soundFile: string;
   playStatus: AudioPlayStatus;
   warningMessage: string | null;
@@ -23,6 +24,7 @@ export interface SoundStatusDetail {
 }
 
 const STORAGE_KEY_SOUND_ENABLED = 'tk_notification_sound_enabled';
+const STORAGE_KEY_SOUND_VOLUME = 'tk_sound_volume';
 const STORAGE_KEY_AUDIO_UNLOCKED = 'tk_audio_unlocked';
 const STORAGE_KEY_SOUND_MUTED = 'tk_notification_sound_muted';
 
@@ -44,6 +46,8 @@ class NotificationSoundService {
   private lastPlayedAt: number | null = null;
   private listeners: Set<(status: SoundStatusDetail) => void> = new Set();
   private isInitialized: boolean = false;
+
+  private volume: number = 1.0;
 
   constructor() {
     this.hydrateFromStorage();
@@ -68,6 +72,14 @@ class NotificationSoundService {
       const mutedVal = localStorage.getItem(STORAGE_KEY_SOUND_MUTED);
       if (mutedVal !== null) {
         this.isMutedState = mutedVal === 'true';
+      }
+
+      const volVal = localStorage.getItem(STORAGE_KEY_SOUND_VOLUME);
+      if (volVal !== null) {
+        const parsed = parseFloat(volVal);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 1.0) {
+          this.volume = parsed;
+        }
       }
     } catch {
       // Ignore localStorage access failures in restricted iframes
@@ -408,11 +420,26 @@ class NotificationSoundService {
     this.notifyListeners();
   }
 
+  public getVolume(): number {
+    return this.volume;
+  }
+
+  public setVolume(vol: number): void {
+    const safeVol = Math.max(0, Math.min(1.0, vol));
+    this.volume = safeVol;
+    this.saveToStorage(STORAGE_KEY_SOUND_VOLUME, String(safeVol));
+    if (this.audioElement) {
+      this.audioElement.volume = safeVol;
+    }
+    this.notifyListeners();
+  }
+
   public getAudioStatus(): SoundStatusDetail {
     return {
       isUnlocked: this.isUnlocked,
       isEnabled: this.isEnabled,
       isMuted: this.isMutedState,
+      volume: this.volume,
       soundFile: this.soundFile,
       playStatus: this.playStatus,
       warningMessage: this.warningMessage,
