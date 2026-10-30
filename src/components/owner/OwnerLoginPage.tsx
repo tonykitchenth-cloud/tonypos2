@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { KeyRound, ShieldCheck, AlertCircle, ArrowLeft, Globe, Lock } from 'lucide-react';
-import { unlockAudioContext } from '../../utils/soundAlarm';
+import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo } from '../../utils/navigation';
 
 export const OwnerLoginPage: React.FC = () => {
@@ -22,14 +22,15 @@ export const OwnerLoginPage: React.FC = () => {
   const [confirmPasscode, setConfirmPasscode] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetPasscode = settings.ownerPasscodeHash || '1234';
     if (passcode.trim() === targetPasscode) {
       setErrorMsg(null);
       setPasscode('');
       setIsOwnerMode(true);
-      unlockAudioContext();
+      await unlockAudioContext();
+      playNotificationSound(settings.notificationSound || 'sound1').catch(() => {});
     } else {
       setErrorMsg(t('invalidPasscode'));
     }

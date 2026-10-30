@@ -4,6 +4,7 @@ let audioCtx: AudioContext | null = null;
 let alarmIntervalId: ReturnType<typeof setInterval> | null = null;
 let isCurrentlyAlarming = false;
 let isSilencedForSession = false;
+let htmlAudioInstance: HTMLAudioElement | null = null;
 
 const STORAGE_KEY_VOLUME = 'tk_sound_volume';
 const STORAGE_KEY_UNLOCKED = 'tk_audio_unlocked';
@@ -67,134 +68,231 @@ export function getAudioContext(): AudioContext | null {
  */
 export async function unlockAudioContext(): Promise<boolean> {
   const ctx = getAudioContext();
-  if (!ctx) return false;
+  let success = false;
 
-  try {
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+      success = ctx.state === 'running';
+    } catch (err) {
+      console.warn('Could not resume AudioContext:', err);
     }
-    if (typeof window !== 'undefined') {
+  }
+
+  // Pre-load and prime HTML5 audio instance
+  if (typeof window !== 'undefined') {
+    try {
       localStorage.setItem(STORAGE_KEY_UNLOCKED, 'true');
+      if (!htmlAudioInstance) {
+        htmlAudioInstance = new Audio();
+        htmlAudioInstance.preload = 'auto';
+      }
+      const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+      const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
+      htmlAudioInstance.src = `${baseUrl}/sounds/new-order.mp3`;
+      htmlAudioInstance.load();
+    } catch {}
+  }
+
+  return success;
+}
+
+// Global user-gesture listener to auto-unlock audio on the first tap/click anywhere
+if (typeof window !== 'undefined') {
+  const handleUserGesture = () => {
+    unlockAudioContext().catch(() => {});
+  };
+  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach((eventName) => {
+    window.addEventListener(eventName, handleUserGesture, { capture: true, passive: true });
+  });
+}
+
+function playHtmlAudioFallback(vol: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+    const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
+    const audioUrl = `${baseUrl}/sounds/new-order.mp3`;
+
+    if (!htmlAudioInstance) {
+      htmlAudioInstance = new Audio();
+      htmlAudioInstance.preload = 'auto';
     }
-    return ctx.state === 'running';
+    htmlAudioInstance.src = audioUrl;
+    htmlAudioInstance.volume = Math.max(0, Math.min(1.0, vol));
+    htmlAudioInstance.currentTime = 0;
+    const playPromise = htmlAudioInstance.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        // Autoplay policy might hold until user gesture
+        console.warn('HTML Audio playback pending user interaction:', err);
+      });
+    }
   } catch (err) {
-    console.warn('Could not resume AudioContext:', err);
-    return false;
+    console.warn('HTML Audio fallback error:', err);
+  }
+}
+
+function playSynthesizedTone(ctx: AudioContext, soundType: NotificationSoundType, vol: number): void {
+  const now = ctx.currentTime;
+
+  if (soundType === 'sound1') {
+    // Sound 1: Loud, Distinct Kitchen Two-Tone Chime (E5 -> C5) with rich triangle tone
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(659.25, now);
+    gain1.gain.setValueAtTime(0.55 * vol, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.45);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(523.25, now + 0.18);
+    gain2.gain.setValueAtTime(0.001, now);
+    gain2.gain.setValueAtTime(0.65 * vol, now + 0.18);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.18);
+    osc2.stop(now + 0.85);
+
+  } else if (soundType === 'sound2') {
+    // Sound 2: Restaurant Service Bell (880Hz + higher harmonics)
+    const freqs = [880, 1760, 2640];
+    const gains = [0.55 * vol, 0.28 * vol, 0.14 * vol];
+
+    freqs.forEach((f, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now);
+      gain.gain.setValueAtTime(gains[idx], now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 1.1);
+    });
+
+  } else if (soundType === 'sound3') {
+    // Sound 3: Kitchen Alert Pulse (Three energetic beeps)
+    [0, 0.15, 0.30].forEach((offset) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, now + offset);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.setValueAtTime(0.3 * vol, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.10);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.10);
+    });
   }
 }
 
 /**
- * Plays a single loud synthesized acoustic sound using the Web Audio API
+ * Plays a loud new order notification sound using Dual Audio Engine:
+ * 1. HTML5 Audio File playback (/sounds/new-order.mp3)
+ * 2. Web Audio API synthesized harmonics
  */
-export function playNotificationSound(
+export async function playNotificationSound(
   soundType: NotificationSoundType = 'sound1',
   customVolume?: number
-): void {
-  if (isSilencedForSession && !isCurrentlyAlarming) {
-    // If user silenced current session and not alarming
-    return;
-  }
-
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
+): Promise<void> {
   const vol = customVolume !== undefined ? customVolume : getMasterVolume();
   if (vol <= 0.01) return; // Muted
 
-  try {
-    const now = ctx.currentTime;
+  // 1. Trigger HTML Audio file (works across all browsers with preloaded asset)
+  playHtmlAudioFallback(vol);
 
-    if (soundType === 'sound1') {
-      // Sound 1: Loud, Distinct Kitchen Two-Tone Chime (E5 -> C5) with harmonics
-      // Note 1 (E5: 659.25Hz + overtone)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'triangle'; // Richer, punchier tone for kitchen environment
-      osc1.frequency.setValueAtTime(659.25, now);
-      gain1.gain.setValueAtTime(0.45 * vol, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.45);
-
-      // Note 2 (C5: 523.25Hz + overtone)
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(523.25, now + 0.18);
-      gain2.gain.setValueAtTime(0.001, now);
-      gain2.gain.setValueAtTime(0.55 * vol, now + 0.18);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.18);
-      osc2.stop(now + 0.85);
-
-    } else if (soundType === 'sound2') {
-      // Sound 2: Restaurant Service Bell (880Hz + higher harmonics)
-      const freqs = [880, 1760, 2640];
-      const gains = [0.5 * vol, 0.25 * vol, 0.12 * vol];
-
-      freqs.forEach((f, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, now);
-        gain.gain.setValueAtTime(gains[idx], now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 1.1);
-      });
-
-    } else if (soundType === 'sound3') {
-      // Sound 3: Kitchen Alert Pulse (Three high-visibility beeps at 880Hz)
-      [0, 0.15, 0.30].forEach((offset) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square'; // Piercing, high-visibility square wave with soft gain
-        osc.frequency.setValueAtTime(880, now + offset);
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.setValueAtTime(0.25 * vol, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.10);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.10);
-      });
+  // 2. ALSO trigger Web Audio API for rich acoustic chime
+  const ctx = getAudioContext();
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {});
+      }
+      if (ctx.state === 'running') {
+        playSynthesizedTone(ctx, soundType, vol);
+      }
+    } catch (err) {
+      console.warn('Web Audio synthesis error:', err);
     }
+  }
+}
+
+/**
+ * Plays a pleasant, friendly rising chime for customer when their order is ready
+ */
+export function playCustomerReadySound(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+    // Note 1 (G5: 783.99Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(783.99, now);
+    gain1.gain.setValueAtTime(0.3, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // Note 2 (C6: 1046.5Hz celebration bell)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1046.5, now + 0.16);
+    gain2.gain.setValueAtTime(0.001, now);
+    gain2.gain.setValueAtTime(0.4, now + 0.16);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.16);
+    osc2.stop(now + 0.9);
   } catch (err) {
-    console.warn('Failed to play synthesized sound:', err);
+    console.warn('Customer chime error:', err);
   }
 }
 
 /**
  * Starts continuous repeating alarm loop for incoming pending orders.
  * Repeats every 3.5 seconds until explicitly stopped.
- * Guards against duplicate intervals and audio overlap.
  */
 export function startContinuousOrderAlarm(soundType: NotificationSoundType = 'sound1'): void {
   // If user explicitly silenced this specific alarm session, do not sound
   if (isSilencedForSession) return;
 
-  // If already actively alarming, do not create duplicate intervals
-  if (isCurrentlyAlarming && alarmIntervalId) return;
+  // Clean up any stale interval
+  if (alarmIntervalId) {
+    clearInterval(alarmIntervalId);
+    alarmIntervalId = null;
+  }
 
   isCurrentlyAlarming = true;
 
-  // Unlock / resume AudioContext
-  unlockAudioContext().catch(() => {});
-
   // Play immediately
-  playNotificationSound(soundType);
+  playNotificationSound(soundType).catch(() => {});
 
   // Repeat every 3.5s
-  if (alarmIntervalId) clearInterval(alarmIntervalId);
   alarmIntervalId = setInterval(() => {
     if (isCurrentlyAlarming && !isSilencedForSession) {
-      playNotificationSound(soundType);
+      playNotificationSound(soundType).catch(() => {});
     } else {
       stopContinuousOrderAlarm();
     }

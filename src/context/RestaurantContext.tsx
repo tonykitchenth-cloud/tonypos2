@@ -41,6 +41,7 @@ import {
   saveActiveOrderId,
   clearSavedActiveOrderId,
   subscribeToAllOrders,
+  subscribeToOrder,
   cleanupStaleLocalOrders,
 } from '../utils/orderSync';
 import {
@@ -51,6 +52,7 @@ import {
   resetAlarmSilence,
   isAlarmSilenced,
   showSystemNotification,
+  playCustomerReadySound,
 } from '../utils/soundAlarm';
 import { notificationSoundService } from '../services/notificationSoundService';
 import { t, translations } from '../i18n/translations';
@@ -190,8 +192,29 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isCustomerProfileOpen, setIsCustomerProfileOpen] = useState<boolean>(false);
   const [isClosedModalOpen, setIsClosedModalOpen] = useState<boolean>(false);
 
-  // Owner Portal
-  const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false);
+  // Owner Portal - Persist authentication session across browser refreshes
+  const [isOwnerMode, setIsOwnerModeState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return sessionStorage.getItem('tk_owner_session_v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const setIsOwnerMode = useCallback((val: boolean) => {
+    setIsOwnerModeState(val);
+    if (typeof window !== 'undefined') {
+      try {
+        if (val) {
+          sessionStorage.setItem('tk_owner_session_v1', 'true');
+        } else {
+          sessionStorage.removeItem('tk_owner_session_v1');
+        }
+      } catch {}
+    }
+  }, []);
+
   const [isOwnerAccessModalOpen, setIsOwnerAccessModalOpen] = useState<boolean>(false);
 
   const setActiveOrderId = useCallback((orderId: string | null) => {
@@ -276,9 +299,44 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [activeOrderId, setActiveOrderId]);
 
+  // Customer auto-popup when restaurant completes the order:
+  // Immediately pops up CustomerOrderStatusModal when status changes to 'completed'
+  const completedOrderPopupShownRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!activeOrderId) return;
+
+    const unsubscribe = subscribeToOrder(
+      activeOrderId,
+      (liveOrder) => {
+        if (liveOrder.status === 'completed') {
+          if (completedOrderPopupShownRef.current !== liveOrder.id) {
+            completedOrderPopupShownRef.current = liveOrder.id;
+            // 🚀 AUTOMATICALLY POP UP FOR CUSTOMER!
+            setIsOrderStatusOpen(true);
+            // Play pleasant customer celebration chime
+            playCustomerReadySound();
+          }
+        }
+      },
+      (err) => {
+        console.warn('Customer active order tracking notice:', err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeOrderId]);
+
   // Real-Time Loud Repeating Notification Sound Alarm for Owner Dashboard
   useEffect(() => {
-    if (!isOwnerMode) {
+    const isOwnerRoute =
+      typeof window !== 'undefined' &&
+      (window.location.pathname.includes('/owner') || window.location.hash.includes('/owner'));
+    const isOwnerActive = isOwnerMode || isOwnerRoute;
+
+    if (!isOwnerActive) {
       stopContinuousOrderAlarm();
       setIsAlarmActive(false);
       return;
@@ -289,7 +347,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (pendingOrdersCount > previousPendingCountRef.current) {
         resetAlarmSilence();
         const latestOrder = pendingOrders[0];
-        const customerName = latestOrder.customer?.name || 'Customer';
+        const customerName = latestOrder?.customer?.name || 'Customer';
         showSystemNotification(
           `Tony's Kitchen - New Order ${latestOrder?.orderNumberFormatted || ''}`,
           `Incoming Order from ${customerName} (฿${latestOrder?.total || 0})`
