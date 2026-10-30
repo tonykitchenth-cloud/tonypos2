@@ -93,11 +93,16 @@ export function sanitizeAppState(data: any): AppStateData {
 
   const cleanedHolidays = cleanExpiredHolidays(rawHolidays);
 
+  const rawLogo = data.settings?.logoUrl;
+  const isOldLogo = !rawLogo || (typeof rawLogo === 'string' && rawLogo.includes('images.unsplash.com/photo-1555396273-367ea4eb4db5'));
+  const resolvedLogo = isOldLogo ? defaultSettings.logoUrl : rawLogo;
+
   return {
     version: data.version || 1,
     settings: {
       ...defaultSettings,
       ...(data.settings || {}),
+      logoUrl: resolvedLogo,
       specialHolidays: cleanedHolidays,
       emergencyClose: {
         ...defaultSettings.emergencyClose,

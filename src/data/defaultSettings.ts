@@ -2,7 +2,7 @@ import { StoreSettings } from '../types';
 
 export const defaultSettings: StoreSettings = {
   restaurantName: "Tony's Kitchen",
-  logoUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=200&h=200&q=80",
+  logoUrl: "./apple-touch-icon.png",
   phone: "0841536498",
   phoneDisplay: "084 153 6498",
   lineId: "padaroisauce",

@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { Heart, ShoppingBag, User, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { navigateTo } from '../utils/navigation';
+import { navigateTo, getLogoUrl } from '../utils/navigation';
 
 export const Header: React.FC = () => {
   const {
@@ -47,21 +47,17 @@ export const Header: React.FC = () => {
             className="relative group cursor-pointer focus:outline-none"
             aria-label="Restaurant Logo"
           >
-            <div className="w-11 h-11 rounded-full overflow-hidden ring-2 ring-[#E65100]/20 bg-[#1A1A1A] flex items-center justify-center transition-transform active:scale-95">
-              {settings.logoUrl ? (
-                <img
-                  src={settings.logoUrl}
-                  alt={settings.restaurantName}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    // Fallback to stylized initial
-                    (e.currentTarget as HTMLElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <span className="text-[#E65100] font-black text-lg">TK</span>
-              )}
+            <div className="w-11 h-11 rounded-full overflow-hidden ring-2 ring-[#E65100]/25 bg-white flex items-center justify-center transition-transform active:scale-95 shadow-xs">
+              <img
+                src={getLogoUrl(settings.logoUrl)}
+                alt={settings.restaurantName}
+                className="w-full h-full object-contain p-0.5"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  // Fallback to stylized initial
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
           </button>
 

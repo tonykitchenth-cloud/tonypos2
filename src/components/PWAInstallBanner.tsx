@@ -6,6 +6,7 @@ import { AndroidInstallGuideModal } from './AndroidInstallGuideModal';
 import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 import { Smartphone, Download, X, HelpCircle, ExternalLink, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getLogoUrl } from '../utils/navigation';
 
 export const PWAInstallBanner: React.FC = () => {
   const {
@@ -132,8 +133,12 @@ export const PWAInstallBanner: React.FC = () => {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   {/* TK App Icon */}
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#E65100] to-[#BF360C] text-white flex items-center justify-center shrink-0 shadow-md ring-2 ring-[#D4AF37]/40 mt-0.5">
-                    <span className="font-black text-sm tracking-widest">TK</span>
+                  <div className="w-11 h-11 rounded-2xl bg-white flex items-center justify-center shrink-0 shadow-md ring-2 ring-[#D4AF37]/40 mt-0.5 overflow-hidden p-0.5">
+                    <img
+                      src={getLogoUrl()}
+                      alt="Tony's Kitchen"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
 
                   <div className="min-w-0">

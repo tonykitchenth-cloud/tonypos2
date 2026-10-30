@@ -71,11 +71,16 @@ export function loadAppState(): AppStateData {
 
     const cleanedHolidays = cleanExpiredHolidays(rawHolidays);
 
+    const storedLogo = parsed.settings?.logoUrl;
+    const isOldLogo = !storedLogo || (typeof storedLogo === 'string' && storedLogo.includes('images.unsplash.com/photo-1555396273-367ea4eb4db5'));
+    const resolvedLogo = isOldLogo ? defaultSettings.logoUrl : storedLogo;
+
     const validatedState: AppStateData = {
       version: parsed.version || APP_DATA_VERSION,
       settings: {
         ...defaultSettings,
         ...(parsed.settings || {}),
+        logoUrl: resolvedLogo,
         specialHolidays: cleanedHolidays,
         emergencyClose: {
           ...defaultSettings.emergencyClose,

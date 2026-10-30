@@ -20,7 +20,7 @@ import { OwnerOrdersTab } from './OwnerOrdersTab';
 import { NewOrderAlertModal } from './NewOrderAlertModal';
 import { OwnerSoundSettingsCard } from './OwnerSoundSettingsCard';
 import { orderNotificationService } from '../../services/orderNotificationService';
-import { navigateTo } from '../../utils/navigation';
+import { navigateTo, getLogoUrl } from '../../utils/navigation';
 import {
   X,
   LogOut,
@@ -1407,12 +1407,12 @@ export const OwnerDashboard: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-4">
                     {/* Active Logo / Selected Preview */}
                     <div className="relative">
-                      <div className="w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-[#E65100]/30 bg-[#1A1A1A] flex items-center justify-center shadow-md">
+                      <div className="w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-[#E65100]/30 bg-white flex items-center justify-center shadow-md">
                         {logoPreview || settings.logoUrl ? (
                           <img
-                            src={logoPreview || settings.logoUrl}
+                            src={logoPreview || getLogoUrl(settings.logoUrl)}
                             alt="Restaurant Logo"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain p-1"
                           />
                         ) : (
                           <span className="text-[#E65100] font-black text-xl">TK</span>

@@ -70,3 +70,30 @@ export function navigateTo(route: AppRoute) {
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 }
+
+/**
+ * Resolves the restaurant logo URL, ensuring relative paths resolve
+ * cleanly against GitHub Pages repository subpaths or root domain.
+ * Automatically upgrades any legacy demo Unsplash placeholders to the official Tony's Kitchen logo.
+ */
+export function getLogoUrl(logoUrl?: string): string {
+  const basePath = getBaseAppPath();
+  const defaultLogo = `${basePath}apple-touch-icon.png`;
+
+  if (!logoUrl) return defaultLogo;
+
+  // Upgrade legacy Unsplash placeholder
+  if (typeof logoUrl === 'string' && logoUrl.includes('images.unsplash.com/photo-1555396273-367ea4eb4db5')) {
+    return defaultLogo;
+  }
+
+  // Preserve external URLs (https://...) and uploaded data URLs (data:image/...)
+  if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('data:')) {
+    return logoUrl;
+  }
+
+  // Relative path (e.g. ./apple-touch-icon.png or apple-touch-icon.png)
+  const cleanPath = logoUrl.replace(/^\.\//, '');
+  return `${basePath}${cleanPath}`;
+}
+
