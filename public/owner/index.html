@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Tony's Kitchen - Owner Dashboard</title>
+    <meta name="description" content="Tony's Kitchen Owner Dashboard and Kitchen Management System." />
+    
+    <script>
+      // 1. Calculate repository base path dynamically and set <base href="...">
+      // Specifically identifies the /owner subpath on GitHub Pages or custom domains,
+      // and provides the correct relative path to the assets folder (e.g., ../assets/ or /<repo>/)
+      // so all relative assets (manifest.json, icons, assets/...) resolve cleanly without 404.
+      (function() {
+        var l = window.location;
+        var isGitHub = l.hostname.endsWith('github.io');
+        var segments = l.pathname.split('/').filter(Boolean);
+        
+        // Identify /owner path segment
+        var ownerIndex = segments.indexOf('owner');
+        var hasOwner = ownerIndex !== -1 || l.pathname.indexOf('/owner') !== -1;
+        var repoName = '';
+        
+        // On GitHub Pages: /<repo-name>/owner -> repoName is segments[0]
+        if (isGitHub && segments.length > 0 && segments[0] !== 'owner') {
+          repoName = segments[0];
+        }
+        
+        // Calculate the base path that correctly points to the root and assets folder:
+        // - If hosted under GitHub Pages repo: /<repoName>/
+        // - If hosted at root or custom domain inside /owner/: relative '../' if path ends with slash, or '/'
+        var basePath;
+        if (repoName) {
+          basePath = '/' + repoName + '/';
+        } else if (hasOwner && (l.pathname.endsWith('/') || l.pathname.indexOf('/owner/') !== -1)) {
+          basePath = '../';
+        } else {
+          basePath = '/';
+        }
+        
+        document.write('<base href="' + basePath + '">');
+        window.__APP_BASE__ = basePath;
+      })();
+
+      // 2. Single Page App redirect handler for GitHub Pages (restores query-based path from 404.html)
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          var normalizedPath = decoded.replace(/\/+$/, '');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + (normalizedPath || '/') + l.hash);
+        }
+      }(window.location));
+    </script>
+
+    <!-- PWA & Mobile Web App Meta -->
+    <meta name="theme-color" content="#E65100" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Tony's Kitchen" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="shortcut icon" href="./favicon-32.png" />
+
+    <meta property="og:title" content="Tony's Kitchen - Owner Dashboard" />
+    <meta property="og:description" content="Tony's Kitchen Owner Dashboard and Kitchen Management System." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Register PWA Service Worker relative to current base path
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('./sw.js').catch(function(err) {
+            console.debug('PWA ServiceWorker registration notice:', err);
+          });
+        });
+      }
+    </script>
+  </head>
+  <body class="bg-[#F8F9FA] text-[#1A1A1A] antialiased selection:bg-[#E65100]/20 selection:text-[#E65100]">
+    <div id="root"></div>
+
+    <script>
+      // Bootstrap the Tony's Kitchen SPA for the Owner view
+      (function() {
+        var isDev = window.location.port === '3000' || window.location.hostname === 'localhost';
+        if (isDev) {
+          // In Vite dev server mode, load the TypeScript module entry point directly
+          var script = document.createElement('script');
+          script.type = 'module';
+          script.src = '/src/main.tsx';
+          document.body.appendChild(script);
+        } else {
+          // In static deployment (GitHub Pages), dynamically load the production bundle from root index.html
+          var appBase = window.__APP_BASE__ || '/';
+          fetch(appBase + 'index.html')
+            .then(function(res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.text();
+            })
+            .then(function(html) {
+              var parser = new DOMParser();
+              var doc = parser.parseFromString(html, 'text/html');
+              
+              // Inject production stylesheet
+              doc.querySelectorAll('link[rel="stylesheet"]').forEach(function(l) {
+                var href = l.getAttribute('href');
+                if (href && !document.querySelector('link[href="' + href + '"]')) {
+                  var linkEl = document.createElement('link');
+                  linkEl.rel = 'stylesheet';
+                  linkEl.href = href;
+                  document.head.appendChild(linkEl);
+                }
+              });
+
+              // Inject production JavaScript module
+              doc.querySelectorAll('script[type="module"]').forEach(function(s) {
+                var src = s.getAttribute('src');
+                if (src && src.indexOf('/src/main.tsx') === -1) {
+                  var scriptEl = document.createElement('script');
+                  scriptEl.type = 'module';
+                  scriptEl.crossOrigin = 'anonymous';
+                  scriptEl.src = src;
+                  document.body.appendChild(scriptEl);
+                }
+              });
+            })
+            .catch(function(err) {
+              console.warn('Direct bundle injection notice, falling back to SPA query route:', err);
+              // Fallback: seamless SPA redirect to root with ?/owner
+              var target = appBase + '?/owner' + (window.location.hash || '');
+              window.location.replace(target);
+            });
+        }
+      })();
+    </script>
+  </body>
+</html>

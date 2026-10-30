@@ -2,19 +2,32 @@ export type AppRoute = 'customer' | 'owner';
 
 /**
  * Detects whether the current browser URL points to the Owner Dashboard (/owner)
- * or Customer Ordering (/), accounting for GitHub Pages repository subpaths and trailing slashes.
+ * or Customer Ordering (/), accounting for GitHub Pages repository subpaths, trailing slashes,
+ * hash routing fallback, and SPA redirect search queries (?/owner).
  */
 export function getAppRoute(): AppRoute {
   if (typeof window === 'undefined') return 'customer';
 
-  // Normalize pathname: remove trailing slashes for consistent comparison
+  // 1. Normalize pathname: remove trailing slashes for consistent comparison
   const path = window.location.pathname.replace(/\/+$/, '');
   const hash = window.location.hash;
+  const search = window.location.search;
 
-  // Match /owner or /<repo-name>/owner or hash #/owner
+  // 2. Check if search query holds SPA redirect path (e.g. ?/owner or ?/owner/ or ?owner)
+  if (
+    search.startsWith('?/owner') ||
+    search.startsWith('?owner') ||
+    search.includes('/owner')
+  ) {
+    return 'owner';
+  }
+
+  // 3. Match pathname (/owner, /owner/, /owner/index.html, or /<repo-name>/owner) or hash (#/owner or #owner)
   if (
     path.endsWith('/owner') ||
     path === '/owner' ||
+    path.endsWith('/owner/index.html') ||
+    path.includes('/owner/') ||
     hash === '#/owner' ||
     hash === '#owner'
   ) {
@@ -31,19 +44,15 @@ export function getAppRoute(): AppRoute {
 export function getBaseAppPath(): string {
   if (typeof window === 'undefined') return '/';
 
-  const currentPath = window.location.pathname;
-  const segments = currentPath.split('/').filter(Boolean);
+  const isGitHub = window.location.hostname.endsWith('github.io');
+  const segments = window.location.pathname.split('/').filter(Boolean);
 
-  if (segments.length === 0) return '/';
-
-  // If currently at /owner or /repo-name/owner
-  if (segments[segments.length - 1] === 'owner') {
-    const parentSegments = segments.slice(0, -1);
-    return parentSegments.length > 0 ? `/${parentSegments.join('/')}/` : '/';
+  // If deployed on github.io with a repository subpath (e.g. /my-repo/ or /my-repo/owner)
+  if (isGitHub && segments.length > 0 && segments[0] !== 'owner') {
+    return `/${segments[0]}/`;
   }
 
-  // If already at /repo-name/
-  return `/${segments.join('/')}/`;
+  return '/';
 }
 
 /**
@@ -56,7 +65,7 @@ export function navigateTo(route: AppRoute) {
   const basePath = getBaseAppPath();
   const targetPath = route === 'owner' ? `${basePath}owner` : basePath;
 
-  if (window.location.pathname !== targetPath) {
+  if (window.location.pathname !== targetPath || window.location.search) {
     window.history.pushState({ route }, '', targetPath);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }

@@ -6,6 +6,31 @@
     <title>Tony's Kitchen</title>
     <meta name="description" content="Mobile-first bilingual Thai restaurant ordering web application with custom options, live store hours, and instant WhatsApp & LINE handoff." />
     
+    <script>
+      // 1. Calculate repository base path dynamically and set <base href="...">
+      // Ensures all relative assets (./assets/..., ./manifest.json, icons) resolve correctly
+      // regardless of whether URL is /, /owner, /owner/, or GitHub Pages subpaths.
+      (function() {
+        var l = window.location;
+        var isGitHub = l.hostname.endsWith('github.io');
+        var segments = l.pathname.split('/').filter(Boolean);
+        var repoName = (isGitHub && segments.length > 0 && segments[0] !== 'owner') ? segments[0] : '';
+        var basePath = repoName ? ('/' + repoName + '/') : '/';
+        document.write('<base href="' + basePath + '">');
+      })();
+
+      // 2. Single Page App redirect handler for GitHub Pages (restores path from 404.html)
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          var normalizedPath = decoded.replace(/\/+$/, '');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + (normalizedPath || '/') + l.hash);
+        }
+      }(window.location));
+    </script>
+
     <!-- PWA & Mobile Web App Meta -->
     <meta name="theme-color" content="#E65100" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -34,23 +59,7 @@
         });
       }
     </script>
-    <script>
-      // 1. Single Page App redirect handler for GitHub Pages (restores path from 404.html)
-      (function(l) {
-        if (l.search[1] === '/') {
-          var decoded = l.search.slice(1).split('&').map(function(s) {
-            return s.replace(/~and~/g, '&');
-          }).join('?');
-          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
-        }
-      }(window.location));
-
-      // 2. Ensure trailing slash on GitHub Pages directory URLs so relative paths resolve correctly
-      if (!window.location.pathname.endsWith('/') && !window.location.pathname.includes('.')) {
-        window.history.replaceState(null, '', window.location.pathname + '/' + window.location.search + window.location.hash);
-      }
-    </script>
-    <script type="module" crossorigin src="./assets/index-CoN59u8M.js"></script>
+    <script type="module" crossorigin src="./assets/index-B9TUaMt8.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Eg69g8Bm.css">
   </head>
   <body class="bg-[#F8F9FA] text-[#1A1A1A] antialiased selection:bg-[#E65100]/20 selection:text-[#E65100]">
