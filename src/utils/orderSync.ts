@@ -294,34 +294,99 @@ export async function fetchOrderById(orderId: string): Promise<RestaurantOrder |
   }
 }
 
+export const ORDER_SYNC_BROADCAST_CHANNEL = 'tonys_kitchen_order_channel_v1';
+
 /**
- * Real-time subscription to a single order for the customer live status screen
+ * Real-time subscription to a single order for the customer live status screen.
+ * Uses Firestore onSnapshot, instant getDoc query, and BroadcastChannel for zero-latency multi-tab updates.
  */
 export function subscribeToOrder(
   orderId: string,
   onUpdate: (order: RestaurantOrder) => void,
   onError?: (err: Error) => void
 ): () => void {
-  if (!db) return () => {};
-  try {
+  if (!orderId) return () => {};
+
+  let isCancelled = false;
+  let activeUnsubscribe: (() => void) | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 1. Instant initial fetch to eliminate any snapshot handshake latency
+  if (db) {
     const docRef = doc(db, ORDERS_COLLECTION, orderId);
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snap) => {
-        if (snap.exists()) {
+    getDoc(docRef)
+      .then((snap) => {
+        if (!isCancelled && snap.exists()) {
           onUpdate(snap.data() as RestaurantOrder);
         }
-      },
-      (err) => {
-        console.warn('Order subscription notice:', err);
-        if (onError) onError(err);
-      }
-    );
-    return unsubscribe;
-  } catch (err: any) {
-    console.warn('Failed to listen to order status:', err);
-    return () => {};
+      })
+      .catch(() => {});
   }
+
+  // 2. Continuous Firestore onSnapshot listener with automatic retry
+  const startListener = () => {
+    if (isCancelled || !db) return;
+    try {
+      const docRef = doc(db, ORDERS_COLLECTION, orderId);
+      activeUnsubscribe = onSnapshot(
+        docRef,
+        (snap) => {
+          if (!isCancelled && snap.exists()) {
+            onUpdate(snap.data() as RestaurantOrder);
+          }
+        },
+        (err) => {
+          console.warn('Order subscription snapshot notice:', err);
+          if (onError) onError(err);
+          if (!isCancelled) {
+            retryTimer = setTimeout(() => {
+              if (!isCancelled) startListener();
+            }, 2500);
+          }
+        }
+      );
+    } catch (err: any) {
+      console.warn('Failed to listen to order status:', err);
+      if (!isCancelled) {
+        retryTimer = setTimeout(() => {
+          if (!isCancelled) startListener();
+        }, 2500);
+      }
+    }
+  };
+
+  startListener();
+
+  // 3. BroadcastChannel listener for sub-millisecond local/tab synchronization
+  let broadcastChannel: BroadcastChannel | null = null;
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      broadcastChannel = new BroadcastChannel(ORDER_SYNC_BROADCAST_CHANNEL);
+      broadcastChannel.onmessage = (event) => {
+        if (!isCancelled && event.data?.orderId === orderId) {
+          if (event.data.order) {
+            onUpdate(event.data.order);
+          } else if (db) {
+            const docRef = doc(db, ORDERS_COLLECTION, orderId);
+            getDoc(docRef)
+              .then((snap) => {
+                if (!isCancelled && snap.exists()) {
+                  onUpdate(snap.data() as RestaurantOrder);
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      };
+    } catch {}
+  }
+
+  return () => {
+    isCancelled = true;
+    if (activeUnsubscribe) activeUnsubscribe();
+    if (retryTimer) clearTimeout(retryTimer);
+    if (broadcastChannel) broadcastChannel.close();
+  };
 }
 
 /**
@@ -415,6 +480,15 @@ export async function updateOrderStatus(
   }
 
   await updateDoc(docRef, updates);
+
+  // Broadcast immediate update across all browser tabs / windows
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      const bc = new BroadcastChannel(ORDER_SYNC_BROADCAST_CHANNEL);
+      bc.postMessage({ type: 'ORDER_STATUS_CHANGED', orderId, status, updates });
+      bc.close();
+    } catch {}
+  }
 }
 
 /**

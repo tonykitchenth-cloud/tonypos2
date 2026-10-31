@@ -53,7 +53,7 @@ export const OwnerOrdersTab: React.FC = () => {
 
   // Filter States
   const [sourceFilter, setSourceFilter] = useState<'all' | OrderSource>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'cancelled' | 'all'>('active');
   const [typeFilter, setTypeFilter] = useState<'all' | 'pickup' | 'delivery'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeDateFilter, setActiveDateFilter] = useState<'today' | 'all'>('today');
@@ -179,6 +179,30 @@ export const OwnerOrdersTab: React.FC = () => {
     }
   };
 
+  // Status category counts for badges
+  const activeOrdersCount = useMemo(() => {
+    return allOrders.filter(
+      (o) =>
+        (o.status === 'pending' || o.status === 'accepted' || o.status === 'on_the_way') &&
+        o.orderNumber !== 1027 &&
+        o.orderNumberFormatted !== '#1027'
+    ).length;
+  }, [allOrders]);
+
+  const completedOrdersCount = useMemo(() => {
+    return allOrders.filter(
+      (o) => o.status === 'completed' && o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027'
+    ).length;
+  }, [allOrders]);
+
+  const cancelledOrdersCount = useMemo(() => {
+    return allOrders.filter((o) => o.status === 'cancelled').length;
+  }, [allOrders]);
+
+  const allOrdersCount = useMemo(() => {
+    return allOrders.filter((o) => o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027').length;
+  }, [allOrders]);
+
   // Filter orders
   const filteredOrders = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -195,18 +219,27 @@ export const OwnerOrdersTab: React.FC = () => {
         return false;
       }
 
-      // Status filter
-      if (statusFilter !== 'all') {
-        if (statusFilter === 'pending') {
-          if (
-            order.status !== 'pending' ||
-            order.paymentStatus === 'paid' ||
-            order.orderNumber === 1027 ||
-            order.orderNumberFormatted === '#1027'
-          ) {
-            return false;
-          }
-        } else if (order.status !== statusFilter) {
+      // Status filter: combines pending, accepted, on_the_way into 'active'
+      if (statusFilter === 'active') {
+        if (
+          order.status === 'completed' ||
+          order.status === 'cancelled' ||
+          order.orderNumber === 1027 ||
+          order.orderNumberFormatted === '#1027'
+        ) {
+          return false;
+        }
+        return order.status === 'pending' || order.status === 'accepted' || order.status === 'on_the_way';
+      } else if (statusFilter === 'completed') {
+        if (order.status !== 'completed' || order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
+          return false;
+        }
+      } else if (statusFilter === 'cancelled') {
+        if (order.status !== 'cancelled') {
+          return false;
+        }
+      } else if (statusFilter === 'all') {
+        if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
           return false;
         }
       }
@@ -495,23 +528,38 @@ export const OwnerOrdersTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter, Search Bar & Add External Order Action */}
+      {/* Filter Bar & Add External Order Action (Search input removed per owner request) */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              id="owner-orders-search-input"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('searchOrdersPlaceholder')}
-              className="w-full pl-9 pr-4 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-orange-500"
-            />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Quick Date Toggle */}
+          <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800 shrink-0">
+            <button
+              id="filter-date-today"
+              type="button"
+              onClick={() => setActiveDateFilter('today')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                activeDateFilter === 'today'
+                  ? 'bg-orange-500 text-neutral-950'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              {t('todayOrders')}
+            </button>
+            <button
+              id="filter-date-all"
+              type="button"
+              onClick={() => setActiveDateFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                activeDateFilter === 'all'
+                  ? 'bg-orange-500 text-neutral-950'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              {t('allTimeOrders')}
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          <div className="flex items-center gap-2">
             {/* + Add External Order Button */}
             <button
               id="btn-add-external-order"
@@ -522,60 +570,108 @@ export const OwnerOrdersTab: React.FC = () => {
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>{t('logExternalOrder')}</span>
             </button>
-
-            {/* Quick Date Toggle */}
-            <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800 shrink-0">
-              <button
-                id="filter-date-today"
-                type="button"
-                onClick={() => setActiveDateFilter('today')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  activeDateFilter === 'today'
-                    ? 'bg-orange-500 text-neutral-950'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                {t('todayOrders')}
-              </button>
-              <button
-                id="filter-date-all"
-                type="button"
-                onClick={() => setActiveDateFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  activeDateFilter === 'all'
-                    ? 'bg-orange-500 text-neutral-950'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                {t('allTimeOrders')}
-              </button>
-            </div>
           </div>
         </div>
 
         {/* Multi-category filter tabs */}
         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
           {/* Status Filter */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full custom-scrollbar">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full custom-scrollbar">
             <span className="text-neutral-500 text-[11px] font-semibold uppercase mr-1">
               {t('status')}:
             </span>
-            {(['all', 'pending', 'accepted', 'on_the_way', 'completed', 'cancelled'] as const).map(
-              (status) => (
-                <button
-                  key={status}
-                  id={`status-filter-${status}`}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 ${
-                    statusFilter === status
-                      ? 'bg-neutral-800 text-white border border-neutral-700'
-                      : 'text-neutral-400 hover:text-white bg-neutral-950/60'
-                  }`}
-                >
-                  {status === 'all' ? t('all') : t(`status_${status}` as any) || status}
-                </button>
-              )
-            )}
+
+            {/* 1. Combined Pending, Accepted, On the way / Ready button */}
+            <button
+              id="status-filter-active"
+              type="button"
+              onClick={() => setStatusFilter('active')}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'active'
+                  ? 'bg-orange-500 text-neutral-950 shadow-md shadow-orange-500/20'
+                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+              }`}
+            >
+              <span>Pending, Accepted, On the way / Ready</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  statusFilter === 'active'
+                    ? 'bg-neutral-950 text-orange-400 font-bold'
+                    : 'bg-neutral-800 text-neutral-400'
+                }`}
+              >
+                {activeOrdersCount}
+              </span>
+            </button>
+
+            {/* 2. Completed button */}
+            <button
+              id="status-filter-completed"
+              type="button"
+              onClick={() => setStatusFilter('completed')}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'completed'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+              }`}
+            >
+              <span>{t('status_completed')}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  statusFilter === 'completed'
+                    ? 'bg-emerald-950 text-emerald-200'
+                    : 'bg-neutral-800 text-neutral-400'
+                }`}
+              >
+                {completedOrdersCount}
+              </span>
+            </button>
+
+            {/* 3. Cancelled button */}
+            <button
+              id="status-filter-cancelled"
+              type="button"
+              onClick={() => setStatusFilter('cancelled')}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'cancelled'
+                  ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+              }`}
+            >
+              <span>{t('status_cancelled')}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  statusFilter === 'cancelled'
+                    ? 'bg-red-950 text-red-200'
+                    : 'bg-neutral-800 text-neutral-400'
+                }`}
+              >
+                {cancelledOrdersCount}
+              </span>
+            </button>
+
+            {/* 4. All button (moved to the end, after Cancelled) */}
+            <button
+              id="status-filter-all"
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'all'
+                  ? 'bg-neutral-700 text-white border border-neutral-600'
+                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+              }`}
+            >
+              <span>{t('all')}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  statusFilter === 'all'
+                    ? 'bg-neutral-900 text-neutral-200'
+                    : 'bg-neutral-800 text-neutral-400'
+                }`}
+              >
+                {allOrdersCount}
+              </span>
+            </button>
           </div>
 
           <div className="h-4 w-px bg-neutral-800 hidden sm:block" />

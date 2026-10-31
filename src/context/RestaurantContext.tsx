@@ -314,11 +314,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       activeOrderId,
       (liveOrder) => {
         if (liveOrder.status === 'completed' || liveOrder.status === 'on_the_way') {
-          if (completedOrderPopupShownRef.current !== liveOrder.id) {
-            completedOrderPopupShownRef.current = liveOrder.id;
+          const alertKey = `${liveOrder.id}_${liveOrder.status}`;
+          if (completedOrderPopupShownRef.current !== alertKey) {
+            completedOrderPopupShownRef.current = alertKey;
             // 🚀 AUTOMATICALLY POP UP FOR CUSTOMER!
             setIsOrderStatusOpen(true);
-            // Play pleasant customer celebration chime
+            // Play loud, pleasant customer celebration chime with haptic vibration
             playCustomerReadySound();
           }
         }

@@ -253,43 +253,71 @@ export async function playNotificationSound(
 }
 
 /**
- * Plays a pleasant, friendly rising chime for customer when their order is ready
+ * Plays a loud, clear, friendly celebration chime for customer when their order is ready,
+ * accompanied by mobile haptic vibration feedback.
  */
 export function playCustomerReadySound(): void {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  try {
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-    const now = ctx.currentTime;
-    // Note 1 (G5: 783.99Hz)
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(783.99, now);
-    gain1.gain.setValueAtTime(0.3, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.35);
-
-    // Note 2 (C6: 1046.5Hz celebration bell)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1046.5, now + 0.16);
-    gain2.gain.setValueAtTime(0.001, now);
-    gain2.gain.setValueAtTime(0.4, now + 0.16);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.16);
-    osc2.stop(now + 0.9);
-  } catch (err) {
-    console.warn('Customer chime error:', err);
+  // 1. Mobile haptic feedback vibration
+  if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([200, 100, 200, 100, 350]);
+    } catch {}
   }
+
+  // 2. Rich 3-note celebratory chime via Web Audio (E5 -> G5 -> C6)
+  const ctx = getAudioContext();
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      const vol = getMasterVolume();
+
+      // Note 1: E5 (659.25Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.5 * vol, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Note 2: G5 (783.99Hz)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(783.99, now + 0.14);
+      gain2.gain.setValueAtTime(0.001, now);
+      gain2.gain.setValueAtTime(0.6 * vol, now + 0.14);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.14);
+      osc2.stop(now + 0.55);
+
+      // Note 3: High C6 (1046.5Hz) celebration bell
+      const osc3 = ctx.createOscillator();
+      const gain3 = ctx.createGain();
+      osc3.type = 'sine';
+      osc3.frequency.setValueAtTime(1046.5, now + 0.28);
+      gain3.gain.setValueAtTime(0.001, now);
+      gain3.gain.setValueAtTime(0.7 * vol, now + 0.28);
+      gain3.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+      osc3.connect(gain3);
+      gain3.connect(ctx.destination);
+      osc3.start(now + 0.28);
+      osc3.stop(now + 1.2);
+    } catch (err) {
+      console.warn('Customer chime error:', err);
+    }
+  }
+
+  // 3. HTML5 Audio backup
+  playHtmlAudioFallback(0.8);
 }
 
 /**
