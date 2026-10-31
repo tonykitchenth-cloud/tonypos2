@@ -1,4 +1,5 @@
 import { NotificationSoundType } from '../types';
+import { getBaseAppPath } from './navigation';
 
 let audioCtx: AudioContext | null = null;
 let alarmIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -8,6 +9,14 @@ let htmlAudioInstance: HTMLAudioElement | null = null;
 
 const STORAGE_KEY_VOLUME = 'tk_sound_volume';
 const STORAGE_KEY_UNLOCKED = 'tk_audio_unlocked';
+
+/**
+ * Resolves absolute URL for audio sound files, correctly handling GitHub Pages subpaths and /owner routes.
+ */
+export function getSoundAssetUrl(fileName: string = 'new-order.mp3'): string {
+  const basePath = getBaseAppPath();
+  return `${basePath}sounds/${fileName}`;
+}
 
 export function getMasterVolume(): number {
   if (typeof window === 'undefined') return 1.0;
@@ -75,6 +84,12 @@ export async function unlockAudioContext(): Promise<boolean> {
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
+      // Play a 1-sample silent buffer to unlock iOS Safari Web Audio engine
+      const silentBuf = ctx.createBuffer(1, 1, 22050);
+      const srcNode = ctx.createBufferSource();
+      srcNode.buffer = silentBuf;
+      srcNode.connect(ctx.destination);
+      srcNode.start(0);
       success = ctx.state === 'running';
     } catch (err) {
       console.warn('Could not resume AudioContext:', err);
@@ -89,10 +104,19 @@ export async function unlockAudioContext(): Promise<boolean> {
         htmlAudioInstance = new Audio();
         htmlAudioInstance.preload = 'auto';
       }
-      const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-      const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
-      htmlAudioInstance.src = `${baseUrl}/sounds/new-order.mp3`;
+      htmlAudioInstance.src = getSoundAssetUrl('new-order.mp3');
       htmlAudioInstance.load();
+
+      // Prime playback and immediately pause to satisfy autoplay permission
+      const primePromise = htmlAudioInstance.play();
+      if (primePromise !== undefined) {
+        primePromise
+          .then(() => {
+            htmlAudioInstance?.pause();
+            if (htmlAudioInstance) htmlAudioInstance.currentTime = 0;
+          })
+          .catch(() => {});
+      }
     } catch {}
   }
 
@@ -112,15 +136,15 @@ if (typeof window !== 'undefined') {
 function playHtmlAudioFallback(vol: number): void {
   if (typeof window === 'undefined') return;
   try {
-    const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-    const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
-    const audioUrl = `${baseUrl}/sounds/new-order.mp3`;
+    const audioUrl = getSoundAssetUrl('new-order.mp3');
 
     if (!htmlAudioInstance) {
       htmlAudioInstance = new Audio();
       htmlAudioInstance.preload = 'auto';
     }
-    htmlAudioInstance.src = audioUrl;
+    if (htmlAudioInstance.src !== audioUrl) {
+      htmlAudioInstance.src = audioUrl;
+    }
     htmlAudioInstance.volume = Math.max(0, Math.min(1.0, vol));
     htmlAudioInstance.currentTime = 0;
     const playPromise = htmlAudioInstance.play();
@@ -219,11 +243,9 @@ export async function playNotificationSound(
   if (ctx) {
     try {
       if (ctx.state === 'suspended') {
-        await ctx.resume().catch(() => {});
+        ctx.resume().catch(() => {});
       }
-      if (ctx.state === 'running') {
-        playSynthesizedTone(ctx, soundType, vol);
-      }
+      playSynthesizedTone(ctx, soundType, vol);
     } catch (err) {
       console.warn('Web Audio synthesis error:', err);
     }

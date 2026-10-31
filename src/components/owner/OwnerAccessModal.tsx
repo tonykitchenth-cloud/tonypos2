@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Lock, KeyRound, X, AlertCircle, ShieldCheck, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { unlockAudioContext } from '../../utils/soundAlarm';
+import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 
 export const OwnerAccessModal: React.FC = () => {
   const {
@@ -34,6 +34,7 @@ export const OwnerAccessModal: React.FC = () => {
       setIsOwnerAccessModalOpen(false);
       setIsOwnerMode(true);
       unlockAudioContext();
+      playNotificationSound(settings.notificationSound || 'sound1').catch(() => {});
     } else {
       setErrorMsg(t('invalidPasscode'));
     }
@@ -57,6 +58,7 @@ export const OwnerAccessModal: React.FC = () => {
     setIsOwnerAccessModalOpen(false);
     setIsOwnerMode(true);
     unlockAudioContext();
+    playNotificationSound(settings.notificationSound || 'sound1').catch(() => {});
   };
 
   return (

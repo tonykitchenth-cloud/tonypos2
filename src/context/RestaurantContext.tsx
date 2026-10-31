@@ -299,17 +299,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [activeOrderId, setActiveOrderId]);
 
-  // Customer auto-popup when restaurant completes the order:
-  // Immediately pops up CustomerOrderStatusModal when status changes to 'completed'
+  // Customer auto-popup when restaurant completes or dispatches the order:
+  // Immediately pops up CustomerOrderStatusModal and chimes when status changes to 'completed' or 'on_the_way'
   const completedOrderPopupShownRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const isOwnerRoute =
+      typeof window !== 'undefined' &&
+      (window.location.pathname.includes('/owner') || window.location.hash.includes('/owner'));
+    if (isOwnerMode || isOwnerRoute) return;
     if (!activeOrderId) return;
 
     const unsubscribe = subscribeToOrder(
       activeOrderId,
       (liveOrder) => {
-        if (liveOrder.status === 'completed') {
+        if (liveOrder.status === 'completed' || liveOrder.status === 'on_the_way') {
           if (completedOrderPopupShownRef.current !== liveOrder.id) {
             completedOrderPopupShownRef.current = liveOrder.id;
             // 🚀 AUTOMATICALLY POP UP FOR CUSTOMER!
@@ -327,7 +331,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => {
       unsubscribe();
     };
-  }, [activeOrderId]);
+  }, [activeOrderId, isOwnerMode]);
 
   // Real-Time Loud Repeating Notification Sound Alarm for Owner Dashboard
   useEffect(() => {

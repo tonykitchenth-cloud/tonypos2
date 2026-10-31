@@ -10,6 +10,8 @@
  * - Mute/Unmute state persistence in localStorage
  */
 
+import { getBaseAppPath } from '../utils/navigation';
+
 export type AudioPlayStatus = 'idle' | 'playing' | 'unlocked' | 'blocked' | 'file_warning';
 
 export interface SoundStatusDetail {
@@ -28,10 +30,13 @@ const STORAGE_KEY_SOUND_VOLUME = 'tk_sound_volume';
 const STORAGE_KEY_AUDIO_UNLOCKED = 'tk_audio_unlocked';
 const STORAGE_KEY_SOUND_MUTED = 'tk_notification_sound_muted';
 
-const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-const baseUrl = metaEnv?.BASE_URL ? String(metaEnv.BASE_URL).replace(/\/$/, '') : '';
-const DEFAULT_SOUND_FILE = `${baseUrl}/sounds/new-order.wav`;
-const FALLBACK_SOUND_FILE = `${baseUrl}/sounds/new-order.mp3`;
+const getSoundUrl = (fileName: string) => {
+  const basePath = getBaseAppPath();
+  return `${basePath}sounds/${fileName}`;
+};
+
+const DEFAULT_SOUND_FILE = getSoundUrl('new-order.mp3');
+const FALLBACK_SOUND_FILE = getSoundUrl('new-order.wav');
 const MIN_PLAY_INTERVAL_MS = 1400; // Cooldown to prevent deafening audio bursts when multiple orders arrive
 
 class NotificationSoundService {
