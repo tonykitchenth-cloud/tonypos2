@@ -53,7 +53,7 @@ export const OwnerOrdersTab: React.FC = () => {
 
   // Filter States
   const [sourceFilter, setSourceFilter] = useState<'all' | OrderSource>('all');
-  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'cancelled' | 'all'>('active');
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'accepted_ready' | 'completed' | 'cancelled' | 'all'>('pending');
   const [typeFilter, setTypeFilter] = useState<'all' | 'pickup' | 'delivery'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeDateFilter, setActiveDateFilter] = useState<'today' | 'all'>('today');
@@ -180,10 +180,20 @@ export const OwnerOrdersTab: React.FC = () => {
   };
 
   // Status category counts for badges
-  const activeOrdersCount = useMemo(() => {
+  const pendingCount = useMemo(() => {
     return allOrders.filter(
       (o) =>
-        (o.status === 'pending' || o.status === 'accepted' || o.status === 'on_the_way') &&
+        o.status === 'pending' &&
+        o.paymentStatus !== 'paid' &&
+        o.orderNumber !== 1027 &&
+        o.orderNumberFormatted !== '#1027'
+    ).length;
+  }, [allOrders]);
+
+  const acceptedReadyCount = useMemo(() => {
+    return allOrders.filter(
+      (o) =>
+        (o.status === 'accepted' || o.status === 'on_the_way') &&
         o.orderNumber !== 1027 &&
         o.orderNumberFormatted !== '#1027'
     ).length;
@@ -219,17 +229,24 @@ export const OwnerOrdersTab: React.FC = () => {
         return false;
       }
 
-      // Status filter: combines pending, accepted, on_the_way into 'active'
-      if (statusFilter === 'active') {
+      // Status filter
+      if (statusFilter === 'pending') {
         if (
-          order.status === 'completed' ||
-          order.status === 'cancelled' ||
+          order.status !== 'pending' ||
+          order.paymentStatus === 'paid' ||
           order.orderNumber === 1027 ||
           order.orderNumberFormatted === '#1027'
         ) {
           return false;
         }
-        return order.status === 'pending' || order.status === 'accepted' || order.status === 'on_the_way';
+      } else if (statusFilter === 'accepted_ready') {
+        if (
+          (order.status !== 'accepted' && order.status !== 'on_the_way') ||
+          order.orderNumber === 1027 ||
+          order.orderNumberFormatted === '#1027'
+        ) {
+          return false;
+        }
       } else if (statusFilter === 'completed') {
         if (order.status !== 'completed' || order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
           return false;
@@ -581,26 +598,49 @@ export const OwnerOrdersTab: React.FC = () => {
               {t('status')}:
             </span>
 
-            {/* 1. Combined Pending, Accepted, On the way / Ready button */}
+            {/* 1. Pending button */}
             <button
-              id="status-filter-active"
+              id="status-filter-pending"
               type="button"
-              onClick={() => setStatusFilter('active')}
+              onClick={() => setStatusFilter('pending')}
               className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'active'
+                statusFilter === 'pending'
+                  ? 'bg-yellow-500 text-neutral-950 shadow-md shadow-yellow-500/20'
+                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+              }`}
+            >
+              <span>{t('status_pending')}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  statusFilter === 'pending'
+                    ? 'bg-neutral-950 text-yellow-400 font-bold'
+                    : 'bg-neutral-800 text-neutral-400'
+                }`}
+              >
+                {pendingCount}
+              </span>
+            </button>
+
+            {/* 2. Accepted, On the way / Ready button */}
+            <button
+              id="status-filter-accepted-ready"
+              type="button"
+              onClick={() => setStatusFilter('accepted_ready')}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'accepted_ready'
                   ? 'bg-orange-500 text-neutral-950 shadow-md shadow-orange-500/20'
                   : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
               }`}
             >
-              <span>Pending, Accepted, On the way / Ready</span>
+              <span>Accepted, On the way / Ready</span>
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'active'
+                  statusFilter === 'accepted_ready'
                     ? 'bg-neutral-950 text-orange-400 font-bold'
                     : 'bg-neutral-800 text-neutral-400'
                 }`}
               >
-                {activeOrdersCount}
+                {acceptedReadyCount}
               </span>
             </button>
 
