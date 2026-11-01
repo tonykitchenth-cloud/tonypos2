@@ -183,7 +183,7 @@ export const OwnerOrdersTab: React.FC = () => {
   const pendingAcceptedCount = useMemo(() => {
     return allOrders.filter(
       (o) =>
-        ((o.status === 'pending' && o.paymentStatus !== 'paid') || o.status === 'accepted') &&
+        (o.status === 'pending' || o.status === 'accepted') &&
         o.orderNumber !== 1027 &&
         o.orderNumberFormatted !== '#1027'
     ).length;
@@ -217,8 +217,8 @@ export const OwnerOrdersTab: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
 
     return allOrders.filter((order) => {
-      // Date filter
-      if (activeDateFilter === 'today') {
+      // Date filter (active pending/accepted orders in the kitchen are always visible)
+      if (activeDateFilter === 'today' && order.status !== 'pending' && order.status !== 'accepted') {
         const orderDate = new Date(order.createdAt).toISOString().split('T')[0];
         if (orderDate !== today) return false;
       }
@@ -233,14 +233,7 @@ export const OwnerOrdersTab: React.FC = () => {
         if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
           return false;
         }
-        if (order.status === 'pending') {
-          if (order.paymentStatus === 'paid') return false;
-          return true;
-        }
-        if (order.status === 'accepted') {
-          return true;
-        }
-        return false;
+        return order.status === 'pending' || order.status === 'accepted';
       } else if (statusFilter === 'on_the_way') {
         if (
           order.status !== 'on_the_way' ||
@@ -294,7 +287,6 @@ export const OwnerOrdersTab: React.FC = () => {
     return allOrders.find(
       (o) =>
         o.status === 'pending' &&
-        o.paymentStatus !== 'paid' &&
         o.orderNumber !== 1027 &&
         o.orderNumberFormatted !== '#1027'
     );
@@ -365,187 +357,6 @@ export const OwnerOrdersTab: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Top Header: Sound Configuration, Quick Stats & Action Buttons */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Real-time Order Stats */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-            <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-              {t('orderMetrics')}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                {t('liveSyncActive')}
-              </span>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 pt-3 text-center">
-            <div className="bg-neutral-950/60 p-2.5 rounded-xl border border-neutral-800">
-              <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                {t('pendingTab')}
-              </span>
-              <span className="text-xl font-mono font-black text-amber-400">
-                {
-                  allOrders.filter(
-                    (o) =>
-                      o.status === 'pending' &&
-                      o.paymentStatus !== 'paid' &&
-                      o.orderNumber !== 1027 &&
-                      o.orderNumberFormatted !== '#1027'
-                  ).length
-                }
-              </span>
-            </div>
-            <div className="bg-neutral-950/60 p-2.5 rounded-xl border border-neutral-800">
-              <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                {t('acceptedTab')}
-              </span>
-              <span className="text-xl font-mono font-black text-blue-400">
-                {allOrders.filter((o) => o.status === 'accepted' || o.status === 'on_the_way').length}
-              </span>
-            </div>
-            <div className="bg-neutral-950/60 p-2.5 rounded-xl border border-neutral-800">
-              <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                {t('completedTab')}
-              </span>
-              <span className="text-xl font-mono font-black text-emerald-400">
-                {allOrders.filter((o) => o.status === 'completed').length}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Kitchen Alarm Sound Settings */}
-        <div className="lg:col-span-2 bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-neutral-800 gap-2">
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-orange-400" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                {t('kitchenSoundSettings')}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleEnableAudioAndNotifications}
-                className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Bell className="w-3 h-3 text-yellow-400" />
-                <span>{notificationStatus === 'granted' ? t('pushNotificationsEnabled') : t('enableSoundNotifications')}</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3">
-            {/* Sound 1: Chime */}
-            <div
-              id="sound-opt-sound1"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleSoundChange('sound1')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleSoundChange('sound1');
-                }
-              }}
-              className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
-                currentSound === 'sound1'
-                  ? 'border-orange-500 bg-orange-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950/40 text-neutral-300 hover:border-neutral-700'
-              }`}
-            >
-              <div>
-                <p className="text-xs font-bold">{t('soundChime')}</p>
-                <p className="text-[10px] text-neutral-400">Two-tone kitchen ding</p>
-              </div>
-              <button
-                type="button"
-                title="Preview"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleTestSound('sound1');
-                }}
-                className="w-7 h-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Sound 2: Service Bell */}
-            <div
-              id="sound-opt-sound2"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleSoundChange('sound2')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleSoundChange('sound2');
-                }
-              }}
-              className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
-                currentSound === 'sound2'
-                  ? 'border-orange-500 bg-orange-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950/40 text-neutral-300 hover:border-neutral-700'
-              }`}
-            >
-              <div>
-                <p className="text-xs font-bold">{t('soundBell')}</p>
-                <p className="text-[10px] text-neutral-400">Classic digital bell</p>
-              </div>
-              <button
-                type="button"
-                title="Preview"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleTestSound('sound2');
-                }}
-                className="w-7 h-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Sound 3: Alert */}
-            <div
-              id="sound-opt-sound3"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleSoundChange('sound3')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleSoundChange('sound3');
-                }
-              }}
-              className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
-                currentSound === 'sound3'
-                  ? 'border-orange-500 bg-orange-500/10 text-white'
-                  : 'border-neutral-800 bg-neutral-950/40 text-neutral-300 hover:border-neutral-700'
-              }`}
-            >
-              <div>
-                <p className="text-xs font-bold">{t('soundAlert')}</p>
-                <p className="text-[10px] text-neutral-400">High-urgency beeps</p>
-              </div>
-              <button
-                type="button"
-                title="Preview"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleTestSound('sound3');
-                }}
-                className="w-7 h-7 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Filter Bar & Add External Order Action (Search input removed per owner request) */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-3">
@@ -714,29 +525,6 @@ export const OwnerOrdersTab: React.FC = () => {
                 {allOrdersCount}
               </span>
             </button>
-          </div>
-
-          <div className="h-4 w-px bg-neutral-800 hidden sm:block" />
-
-          {/* Source Filter */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full custom-scrollbar">
-            <span className="text-neutral-500 text-[11px] font-semibold uppercase mr-1">
-              {t('source')}:
-            </span>
-            {(['all', 'in_app', 'whatsapp', 'line'] as const).map((source) => (
-              <button
-                key={source}
-                id={`source-filter-${source}`}
-                onClick={() => setSourceFilter(source)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase transition-colors cursor-pointer shrink-0 ${
-                  sourceFilter === source
-                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                    : 'text-neutral-400 hover:text-white bg-neutral-950/60'
-                }`}
-              >
-                {source === 'all' ? t('all') : source.replace('_', '-')}
-              </button>
-            ))}
           </div>
 
           <div className="h-4 w-px bg-neutral-800 hidden sm:block" />

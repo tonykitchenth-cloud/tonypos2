@@ -3,6 +3,7 @@ import {
   collection,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   onSnapshot,
   query,
@@ -256,14 +257,29 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
   };
 
   if (db) {
-    try {
-      const docRef = doc(db, ORDERS_COLLECTION, orderId);
-      await setDoc(docRef, {
-        ...newOrder,
-        _serverCreatedAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.warn('Could not save order to Firestore:', e);
+    let saved = false;
+    let lastErr: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const docRef = doc(db, ORDERS_COLLECTION, orderId);
+        await setDoc(docRef, {
+          ...newOrder,
+          _serverCreatedAt: serverTimestamp(),
+        });
+        saved = true;
+        break;
+      } catch (e: any) {
+        lastErr = e;
+        console.warn(`Attempt ${attempt + 1} to save order to Firestore:`, e);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+
+    if (!saved) {
+      console.error('All attempts to save order to Firestore failed:', lastErr);
+      throw new Error(
+        lastErr?.message || 'Cannot submit order to restaurant server. Please try again.'
+      );
     }
   }
 
@@ -272,6 +288,15 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
     markTokenAsUsed(params.clientToken);
   }
   saveActiveOrderId(orderId);
+
+  // Broadcast new order to any open owner tabs immediately
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      const bc = new BroadcastChannel(ORDER_SYNC_BROADCAST_CHANNEL);
+      bc.postMessage({ type: 'NEW_ORDER_CREATED', order: newOrder });
+      bc.close();
+    } catch {}
+  }
 
   return newOrder;
 }
@@ -400,11 +425,30 @@ export function subscribeToAllOrders(
   let isCancelled = false;
   let activeUnsubscribe: (() => void) | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let broadcastChannel: BroadcastChannel | null = null;
 
+  const ordersCol = collection(db, ORDERS_COLLECTION);
+
+  // 1. Immediate initial fetch via getDocs so owner sees orders without waiting
+  getDocs(ordersCol)
+    .then((snap) => {
+      if (isCancelled || snap.empty) return;
+      const list: RestaurantOrder[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data() as RestaurantOrder;
+        list.push(data);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onUpdate(list);
+    })
+    .catch((err) => {
+      console.warn('Initial orders fetch notice:', err);
+    });
+
+  // 2. Real-time onSnapshot listener
   const startListener = () => {
     if (isCancelled || !db) return;
     try {
-      const ordersCol = collection(db, ORDERS_COLLECTION);
       activeUnsubscribe = onSnapshot(
         ordersCol,
         (snapshot) => {
@@ -442,10 +486,32 @@ export function subscribeToAllOrders(
 
   startListener();
 
+  // 3. Local sub-millisecond tab sync via BroadcastChannel
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      broadcastChannel = new BroadcastChannel(ORDER_SYNC_BROADCAST_CHANNEL);
+      broadcastChannel.onmessage = (event) => {
+        if (isCancelled) return;
+        if (event.data?.type === 'NEW_ORDER_CREATED' && event.data.order) {
+          getDocs(ordersCol)
+            .then((snap) => {
+              if (isCancelled) return;
+              const list: RestaurantOrder[] = [];
+              snap.forEach((d) => list.push(d.data() as RestaurantOrder));
+              list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              onUpdate(list);
+            })
+            .catch(() => {});
+        }
+      };
+    } catch {}
+  }
+
   return () => {
     isCancelled = true;
     if (activeUnsubscribe) activeUnsubscribe();
     if (retryTimer) clearTimeout(retryTimer);
+    if (broadcastChannel) broadcastChannel.close();
   };
 }
 

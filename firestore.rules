@@ -33,10 +33,6 @@ service cloud.firestore {
 
     function isValidOrderData(data) {
       return data.orderNumber is number
-        && data.source in ['in_app', 'line', 'whatsapp']
-        && data.status in ['pending', 'accepted', 'on_the_way', 'completed', 'cancelled']
-        && data.orderType in ['pickup', 'delivery']
-        && data.paymentMethod in ['cash', 'qr_payment']
         && data.customer is map
         && data.items is list;
     }
@@ -53,8 +49,11 @@ service cloud.firestore {
 
     // Match orders collection (/orders/{orderId})
     match /orders/{orderId} {
-      // Allow reading order status in real time for customers tracking their order and staff
-      allow read: if isValidId(orderId);
+      // Allow reading single order status in real time for customers tracking their order
+      allow get: if isValidId(orderId);
+
+      // Allow listing all orders for Owner Dashboard live kitchen feed
+      allow list: if true;
 
       // Create new order with validation
       allow create: if isValidId(orderId) && isValidOrderData(incoming());

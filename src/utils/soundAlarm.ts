@@ -96,26 +96,14 @@ export async function unlockAudioContext(): Promise<boolean> {
     }
   }
 
-  // Pre-load and prime HTML5 audio instance
+  // Pre-load HTML5 audio instance silently without playing
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY_UNLOCKED, 'true');
       if (!htmlAudioInstance) {
         htmlAudioInstance = new Audio();
         htmlAudioInstance.preload = 'auto';
-      }
-      htmlAudioInstance.src = getSoundAssetUrl('new-order.mp3');
-      htmlAudioInstance.load();
-
-      // Prime playback and immediately pause to satisfy autoplay permission
-      const primePromise = htmlAudioInstance.play();
-      if (primePromise !== undefined) {
-        primePromise
-          .then(() => {
-            htmlAudioInstance?.pause();
-            if (htmlAudioInstance) htmlAudioInstance.currentTime = 0;
-          })
-          .catch(() => {});
+        htmlAudioInstance.src = getSoundAssetUrl('new-order.mp3');
       }
     } catch {}
   }
@@ -123,13 +111,28 @@ export async function unlockAudioContext(): Promise<boolean> {
   return success;
 }
 
-// Global user-gesture listener to auto-unlock audio on the first tap/click anywhere
+// Global user-gesture listener to silently resume AudioContext on the very first interaction
 if (typeof window !== 'undefined') {
-  const handleUserGesture = () => {
-    unlockAudioContext().catch(() => {});
+  let initialGestureProcessed = false;
+  const handleInitialUserGesture = () => {
+    if (initialGestureProcessed) return;
+    initialGestureProcessed = true;
+
+    // Immediately remove all listeners so subsequent clicks, touches, and scrolls never run this
+    const events = ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'];
+    events.forEach((ev) => {
+      window.removeEventListener(ev, handleInitialUserGesture, true);
+    });
+
+    // Silently resume audio context without producing any sound
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
   };
+
   ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach((eventName) => {
-    window.addEventListener(eventName, handleUserGesture, { capture: true, passive: true });
+    window.addEventListener(eventName, handleInitialUserGesture, { capture: true, passive: true });
   });
 }
 

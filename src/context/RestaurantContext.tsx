@@ -272,7 +272,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (
         o.status === 'completed' ||
         o.status === 'cancelled' ||
-        o.paymentStatus === 'paid' ||
         o.orderNumber === 1027 ||
         o.orderNumberFormatted === '#1027' ||
         o.id === 'order_1788684802302_fmqk2'

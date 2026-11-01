@@ -53,6 +53,7 @@ import {
   ImageOff,
   ShoppingBag,
   Bell,
+  Volume2,
   Loader2,
 } from 'lucide-react';
 
@@ -634,6 +635,53 @@ export const OwnerDashboard: React.FC = () => {
                           : 'Set Emergency Close'}
                       </span>
                     </button>
+                  </div>
+                {/* Real-time Orders Card (Moved from Orders Tab per owner request) */}
+                <div className="bg-white rounded-3xl p-5 border border-gray-200 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4 text-[#E65100]" />
+                      <span>{language === 'th' ? 'สถิติออเดอร์สด (Real-Time Orders)' : 'Real-Time Orders'}</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                        {language === 'th' ? 'เชื่อมต่อสด Real-Time' : 'Live Sync Active'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2.5 pt-3 text-center">
+                    <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200/80">
+                      <span className="text-[11px] text-amber-800 uppercase font-bold block">
+                        {t('pendingTab')}
+                      </span>
+                      <span className="text-2xl font-mono font-black text-amber-600">
+                        {
+                          allOrders.filter(
+                            (o) =>
+                              o.status === 'pending' &&
+                              o.orderNumber !== 1027 &&
+                              o.orderNumberFormatted !== '#1027'
+                          ).length
+                        }
+                      </span>
+                    </div>
+                    <div className="bg-blue-50/70 p-3 rounded-2xl border border-blue-200/80">
+                      <span className="text-[11px] text-blue-800 uppercase font-bold block">
+                        {t('acceptedTab')}
+                      </span>
+                      <span className="text-2xl font-mono font-black text-blue-600">
+                        {allOrders.filter((o) => (o.status === 'accepted' || o.status === 'on_the_way') && o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027').length}
+                      </span>
+                    </div>
+                    <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200/80">
+                      <span className="text-[11px] text-emerald-800 uppercase font-bold block">
+                        {t('completedTab')}
+                      </span>
+                      <span className="text-2xl font-mono font-black text-emerald-600">
+                        {allOrders.filter((o) => o.status === 'completed' && o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027').length}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1659,6 +1707,125 @@ export const OwnerDashboard: React.FC = () => {
         {/* ---------------- NOTIFICATIONS TAB (Direct Sidebar Access) ---------------- */}
         {activeTab === 'notifications' && (
           <div className="space-y-6">
+            {/* Kitchen Alarm & Chimes Card (Moved from Orders Tab per owner request) */}
+            <div className="bg-white rounded-3xl p-5 border border-gray-200 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-100 gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-orange-50 text-[#E65100] flex items-center justify-center">
+                    <Volume2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#1A1A1A]">
+                      {t('kitchenSoundSettings')} (Kitchen Alarm & Chimes)
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {language === 'th'
+                        ? 'เลือกรูปแบบเสียงแจ้งเตือนออเดอร์ใหม่เมื่อมีลูกค้าสั่งอาหารเข้ามา'
+                        : 'Select alarm chime style for incoming orders'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                {/* Sound 1: Chime */}
+                <div
+                  id="sound-opt-sound1"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    updateSettings({ notificationSound: 'sound1' });
+                    playNotificationSound('sound1');
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
+                    (settings.notificationSound || 'sound1') === 'sound1'
+                      ? 'border-[#E65100] bg-orange-50/50 shadow-xs ring-1 ring-[#E65100]/20'
+                      : 'border-gray-200 bg-gray-50/70 hover:border-gray-300'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold text-[#1A1A1A]">{t('soundChime')}</p>
+                    <p className="text-[10px] text-gray-500">Two-tone kitchen ding</p>
+                  </div>
+                  <button
+                    type="button"
+                    title="Preview"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playNotificationSound('sound1');
+                    }}
+                    className="w-8 h-8 rounded-xl bg-white hover:bg-orange-100 text-gray-700 hover:text-[#E65100] border border-gray-200 flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Sound 2: Service Bell */}
+                <div
+                  id="sound-opt-sound2"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    updateSettings({ notificationSound: 'sound2' });
+                    playNotificationSound('sound2');
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
+                    settings.notificationSound === 'sound2'
+                      ? 'border-[#E65100] bg-orange-50/50 shadow-xs ring-1 ring-[#E65100]/20'
+                      : 'border-gray-200 bg-gray-50/70 hover:border-gray-300'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold text-[#1A1A1A]">{t('soundBell')}</p>
+                    <p className="text-[10px] text-gray-500">Classic digital bell</p>
+                  </div>
+                  <button
+                    type="button"
+                    title="Preview"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playNotificationSound('sound2');
+                    }}
+                    className="w-8 h-8 rounded-xl bg-white hover:bg-orange-100 text-gray-700 hover:text-[#E65100] border border-gray-200 flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Sound 3: Alert */}
+                <div
+                  id="sound-opt-sound3"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    updateSettings({ notificationSound: 'sound3' });
+                    playNotificationSound('sound3');
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
+                    settings.notificationSound === 'sound3'
+                      ? 'border-[#E65100] bg-orange-50/50 shadow-xs ring-1 ring-[#E65100]/20'
+                      : 'border-gray-200 bg-gray-50/70 hover:border-gray-300'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold text-[#1A1A1A]">{t('soundAlert')}</p>
+                    <p className="text-[10px] text-gray-500">High-urgency beeps</p>
+                  </div>
+                  <button
+                    type="button"
+                    title="Preview"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playNotificationSound('sound3');
+                    }}
+                    className="w-8 h-8 rounded-xl bg-white hover:bg-orange-100 text-gray-700 hover:text-[#E65100] border border-gray-200 flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <OwnerSoundSettingsCard language={language} />
           </div>
         )}
