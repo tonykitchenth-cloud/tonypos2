@@ -111,30 +111,6 @@ export async function unlockAudioContext(): Promise<boolean> {
   return success;
 }
 
-// Global user-gesture listener to silently resume AudioContext on the very first interaction
-if (typeof window !== 'undefined') {
-  let initialGestureProcessed = false;
-  const handleInitialUserGesture = () => {
-    if (initialGestureProcessed) return;
-    initialGestureProcessed = true;
-
-    // Immediately remove all listeners so subsequent clicks, touches, and scrolls never run this
-    const events = ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'];
-    events.forEach((ev) => {
-      window.removeEventListener(ev, handleInitialUserGesture, true);
-    });
-
-    // Silently resume audio context without producing any sound
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  };
-
-  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach((eventName) => {
-    window.addEventListener(eventName, handleInitialUserGesture, { capture: true, passive: true });
-  });
-}
 
 function playHtmlAudioFallback(vol: number): void {
   if (typeof window === 'undefined') return;

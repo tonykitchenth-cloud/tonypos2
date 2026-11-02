@@ -5,9 +5,6 @@ export interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-// Dedicated separate preference key to avoid interfering with any existing LocalStorage keys
-const DISMISS_PREFERENCE_KEY = 'tk_pwa_install_guide_dismissed_v2';
-
 export interface PWAInstallState {
   isInstalled: boolean;
   isIOS: boolean;
@@ -15,11 +12,9 @@ export interface PWAInstallState {
   isSafari: boolean;
   isChrome: boolean;
   isLineBrowser: boolean;
+  isInAppBrowser: boolean;
   supportsNativePrompt: boolean;
-  isDismissed: boolean;
   installNativePrompt: () => Promise<'accepted' | 'dismissed' | 'unavailable'>;
-  dismissGuidance: () => void;
-  resetDismissal: () => void;
 }
 
 export function usePWAInstall(): PWAInstallState {
@@ -30,39 +25,49 @@ export function usePWAInstall(): PWAInstallState {
   const [isSafari, setIsSafari] = useState<boolean>(false);
   const [isChrome, setIsChrome] = useState<boolean>(false);
   const [isLineBrowser, setIsLineBrowser] = useState<boolean>(false);
-  const [isDismissed, setIsDismissed] = useState<boolean>(false);
+  const [isInAppBrowser, setIsInAppBrowser] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. Detect Standalone / Installed Display Mode
-    // Use capability and matchMedia checks first
-    const isStandaloneDisplay =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      window.matchMedia('(display-mode: fullscreen)').matches ||
-      window.matchMedia('(display-mode: minimal-ui)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      document.referrer.includes('android-app://');
+    // 1. Check Standalone / Installed Display Mode strictly via system matchMedia and navigator
+    const checkStandalone = (): boolean => {
+      return (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+        document.referrer.includes('android-app://')
+      );
+    };
 
-    setIsInstalled(isStandaloneDisplay);
+    setIsInstalled(checkStandalone());
 
-    // 2. Check dismissal preference from separate key
-    try {
-      const storedDismissal = localStorage.getItem(DISMISS_PREFERENCE_KEY);
-      if (storedDismissal === 'true') {
-        setIsDismissed(true);
+    // Listen for display mode changes (e.g. user opens standalone window)
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleDisplayChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setIsInstalled(true);
       }
-    } catch {
-      // Fallback for private browsing mode restrictions
+    };
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleDisplayChange);
+    } else if ((mediaQuery as unknown as { addListener?: (cb: (e: MediaQueryListEvent) => void) => void }).addListener) {
+      (mediaQuery as unknown as { addListener: (cb: (e: MediaQueryListEvent) => void) => void }).addListener(handleDisplayChange);
     }
 
-    // 3. User Agent & Environment Analysis
+    // 2. User Agent & In-App Browser Analysis
     const ua = (window.navigator.userAgent || '').toLowerCase();
 
-    // LINE In-App Browser detection (very common in Thailand when links are shared in LINE chats)
-    // LINE user agent contains 'line/' or 'line ' or '; line'
-    const hasLineIdentifier = /line\/|line\s|;\sline/i.test(ua) || (ua.includes('line') && !ua.includes('online'));
-    setIsLineBrowser(hasLineIdentifier);
+    // In-App browser detection: LINE, Facebook, Instagram, Threads, Twitter, TikTok, WeChat, WebViews
+    const isLine = /line\/|line\s|;\sline/i.test(ua) || (ua.includes('line') && !ua.includes('online'));
+    const isFacebookOrInsta = /fban|fbav|instagram|threads|fb_iab|fb4a|fbios/i.test(ua);
+    const isTwitterOrTikTok = /twitter|tiktok|micromessenger/i.test(ua);
+    const isGenericWebView = /webview|;\s*wv/i.test(ua);
+    const inApp = isLine || isFacebookOrInsta || isTwitterOrTikTok || isGenericWebView;
+
+    setIsLineBrowser(isLine);
+    setIsInAppBrowser(inApp);
 
     // iOS Detection (supports iPadOS 13+ with desktop UA)
     const isAppleMobile =
@@ -78,17 +83,18 @@ export function usePWAInstall(): PWAInstallState {
     const isAppleSafari =
       isAppleMobile &&
       /safari/.test(ua) &&
-      !/chrome|crios|fxios|edgios|line/i.test(ua);
+      !/chrome|crios|fxios|edgios|line|fban|fbav/i.test(ua);
     setIsSafari(isAppleSafari);
 
     // Chrome Detection
     const isGoogleChrome =
       /chrome|crios/.test(ua) &&
-      !/edg|opr|line/i.test(ua);
+      !/edg|opr|line|fban|fbav/i.test(ua);
     setIsChrome(isGoogleChrome);
 
-    // 4. Native beforeinstallprompt listener (Android Chrome / Chromium)
+    // 3. Native beforeinstallprompt listener (Android Chrome / Chromium)
     const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent default mini-infobar so our custom INSTALL APP button controls the flow
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
@@ -96,11 +102,6 @@ export function usePWAInstall(): PWAInstallState {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
-      try {
-        localStorage.removeItem(DISMISS_PREFERENCE_KEY);
-      } catch {
-        // no-op
-      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -109,10 +110,15 @@ export function usePWAInstall(): PWAInstallState {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleDisplayChange);
+      } else if ((mediaQuery as unknown as { removeListener?: (cb: (e: MediaQueryListEvent) => void) => void }).removeListener) {
+        (mediaQuery as unknown as { removeListener: (cb: (e: MediaQueryListEvent) => void) => void }).removeListener(handleDisplayChange);
+      }
     };
   }, []);
 
-  // Trigger native prompt strictly after customer taps button
+  // Trigger native prompt strictly after customer taps INSTALL APP button
   const installNativePrompt = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
     if (!deferredPrompt) {
       return 'unavailable';
@@ -125,31 +131,13 @@ export function usePWAInstall(): PWAInstallState {
         setDeferredPrompt(null);
         return 'accepted';
       }
+      // User cancelled/dismissed: do NOT mark as installed
       return 'dismissed';
     } catch (err) {
       console.warn('Native PWA install prompt error:', err);
       return 'unavailable';
     }
   }, [deferredPrompt]);
-
-  // Remember dismissal using new separate preference key
-  const dismissGuidance = useCallback(() => {
-    setIsDismissed(true);
-    try {
-      localStorage.setItem(DISMISS_PREFERENCE_KEY, 'true');
-    } catch {
-      // no-op
-    }
-  }, []);
-
-  const resetDismissal = useCallback(() => {
-    setIsDismissed(false);
-    try {
-      localStorage.removeItem(DISMISS_PREFERENCE_KEY);
-    } catch {
-      // no-op
-    }
-  }, []);
 
   return {
     isInstalled,
@@ -158,10 +146,8 @@ export function usePWAInstall(): PWAInstallState {
     isSafari,
     isChrome,
     isLineBrowser,
+    isInAppBrowser,
     supportsNativePrompt: Boolean(deferredPrompt),
-    isDismissed,
     installNativePrompt,
-    dismissGuidance,
-    resetDismissal,
   };
 }

@@ -636,6 +636,8 @@ export const OwnerDashboard: React.FC = () => {
                       </span>
                     </button>
                   </div>
+                </div>
+
                 {/* Real-time Orders Card (Moved from Orders Tab per owner request) */}
                 <div className="bg-white rounded-3xl p-5 border border-gray-200 shadow-xs flex flex-col justify-between">
                   <div className="flex items-center justify-between pb-3 border-b border-gray-100">

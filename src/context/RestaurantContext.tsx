@@ -299,8 +299,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [activeOrderId, setActiveOrderId]);
 
   // Customer auto-popup when restaurant completes or dispatches the order:
-  // Immediately pops up CustomerOrderStatusModal and chimes when status changes to 'completed' or 'on_the_way'
-  const completedOrderPopupShownRef = useRef<string | null>(null);
+  // ONLY pop up and chime when status transitions in real-time during this active session
+  const previousCustomerOrderStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
     const isOwnerRoute =
@@ -309,18 +309,29 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (isOwnerMode || isOwnerRoute) return;
     if (!activeOrderId) return;
 
+    let isInitialLoad = true;
+
     const unsubscribe = subscribeToOrder(
       activeOrderId,
       (liveOrder) => {
-        if (liveOrder.status === 'completed' || liveOrder.status === 'on_the_way') {
-          const alertKey = `${liveOrder.id}_${liveOrder.status}`;
-          if (completedOrderPopupShownRef.current !== alertKey) {
-            completedOrderPopupShownRef.current = alertKey;
-            // 🚀 AUTOMATICALLY POP UP FOR CUSTOMER!
-            setIsOrderStatusOpen(true);
-            // Play loud, pleasant customer celebration chime with haptic vibration
-            playCustomerReadySound();
-          }
+        if (!liveOrder) return;
+        const prevStatus = previousCustomerOrderStatusRef.current;
+        previousCustomerOrderStatusRef.current = liveOrder.status;
+
+        if (isInitialLoad) {
+          isInitialLoad = false;
+          // When first loading the page, if order was already completed in the past, do not play audio
+          return;
+        }
+
+        // Live transition check: only pop up and play sound if status changed to completed or on_the_way
+        if (
+          (liveOrder.status === 'completed' || liveOrder.status === 'on_the_way') &&
+          prevStatus !== 'completed' &&
+          prevStatus !== 'on_the_way'
+        ) {
+          setIsOrderStatusOpen(true);
+          playCustomerReadySound();
         }
       },
       (err) => {
@@ -333,12 +344,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [activeOrderId, isOwnerMode]);
 
-  // Real-Time Loud Repeating Notification Sound Alarm for Owner Dashboard
+  // Real-Time Loud Repeating Notification Sound Alarm for Owner Dashboard ONLY
   useEffect(() => {
     const isOwnerRoute =
       typeof window !== 'undefined' &&
       (window.location.pathname.includes('/owner') || window.location.hash.includes('/owner'));
-    const isOwnerActive = isOwnerMode || isOwnerRoute;
+    const isOwnerActive = Boolean(isOwnerRoute && isOwnerMode);
 
     if (!isOwnerActive) {
       stopContinuousOrderAlarm();

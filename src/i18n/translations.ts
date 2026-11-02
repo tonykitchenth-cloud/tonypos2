@@ -92,10 +92,10 @@ export const translations = {
     lineBannerTitle: "Opened inside LINE",
     lineBannerDesc: "Open in Safari or Chrome for full-screen ordering and home screen installation.",
     lineOpenExternalBtn: "How to Open in Safari / Chrome",
-    lineModalTitle: "Open in External Browser",
-    lineModalDesc: "LINE's in-app browser has limited installation features. Open in your main browser for the best experience:",
-    lineStepIOS: "Tap '...' or Share icon at the bottom of LINE > Select 'Open in default browser' (Safari).",
-    lineStepAndroid: "Tap '⋮' at the top right of LINE > Select 'Open in default browser' (Chrome).",
+    lineModalTitle: "Open in Safari or Chrome",
+    lineModalDesc: "In-app browsers (LINE, Facebook, etc.) do not support direct app installation. Please open in your default browser:",
+    lineStepIOS: "Tap '...' or Share icon in your app > Select 'Open in default browser' (Safari).",
+    lineStepAndroid: "Tap '⋮' or '...' in your app > Select 'Open in Chrome'.",
     
     // iPhone / iPad Safari Guide
     iosInstructionsTitle: "Install on iPhone / iPad",
@@ -498,10 +498,10 @@ export const translations = {
     lineBannerTitle: "คุณกำลังเปิดผ่าน LINE",
     lineBannerDesc: "แนะนำให้เปิดใน Safari หรือ Chrome เพื่อการสั่งอาหารเต็มจอและติดตั้งลงหน้าจอมือถือ",
     lineOpenExternalBtn: "วิธีเปิดใน Safari / Chrome",
-    lineModalTitle: "วิธีเปิดในเบราว์เซอร์หลักจาก LINE",
-    lineModalDesc: "เบราว์เซอร์ในแอป LINE มีข้อจำกัดในการติดตั้ง ให้เปิดผ่านเบราว์เซอร์หลักของเครื่องเพื่อประสบการณ์ที่ดีที่สุดครับ:",
-    lineStepIOS: "แตะปุ่ม '...' หรือไอคอนแชร์ที่แถบด้านล่างของ LINE > เลือก 'เปิดในเบราว์เซอร์เริ่มต้น' (Safari)",
-    lineStepAndroid: "แตะปุ่ม '⋮' ที่มุมขวาบนของ LINE > เลือก 'เปิดในเบราว์เซอร์อื่น' (Chrome)",
+    lineModalTitle: "วิธีเปิดในเบราว์เซอร์หลัก (Safari / Chrome)",
+    lineModalDesc: "เบราว์เซอร์ในแอป (เช่น LINE, Facebook) ไม่รองรับการติดตั้งแอปโดยตรง กรุณาเปิดผ่าน Safari หรือ Chrome เพื่อติดตั้ง:",
+    lineStepIOS: "แตะปุ่ม '...' หรือไอคอนแชร์ในแอป > เลือก 'เปิดในเบราว์เซอร์เริ่มต้น' (Safari)",
+    lineStepAndroid: "แตะปุ่ม '⋮' หรือ '...' ในแอป > เลือก 'เปิดในเบราว์เซอร์อื่น' (Chrome)",
     
     // iPhone / iPad Safari Guide
     iosInstructionsTitle: "วิธีติดตั้งบน iPhone / iPad",
