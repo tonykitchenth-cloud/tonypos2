@@ -18,6 +18,7 @@ import { CustomerOrderStatusModal } from './components/CustomerOrderStatusModal'
 import { ActiveOrderFloatingBanner } from './components/ActiveOrderFloatingBanner';
 import { FavoritesDrawer } from './components/FavoritesDrawer';
 import { CustomerProfileModal } from './components/CustomerProfileModal';
+import { CustomerOrderHistoryModal } from './components/CustomerOrderHistoryModal';
 import { ClosedStoreModal } from './components/ClosedStoreModal';
 import { OwnerAccessModal } from './components/owner/OwnerAccessModal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
@@ -148,6 +149,7 @@ const MainCustomerView: React.FC = () => {
       <OrderSuccessModal />
       <FavoritesDrawer />
       <CustomerProfileModal />
+      <CustomerOrderHistoryModal />
       <ClosedStoreModal />
       <OwnerAccessModal />
     </div>

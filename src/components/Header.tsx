@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { Heart, ShoppingBag, User, Globe } from 'lucide-react';
+import { Heart, ShoppingBag, User, Globe, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { navigateTo, getLogoUrl } from '../utils/navigation';
 
@@ -11,9 +11,11 @@ export const Header: React.FC = () => {
     settings,
     cartTotalQuantity,
     favorites,
+    customerOrderHistory,
     setIsCartOpen,
     setIsFavoritesOpen,
     setIsCustomerProfileOpen,
+    setIsCustomerOrderHistoryOpen,
     setIsOwnerAccessModalOpen,
     t,
   } = useRestaurant();
@@ -116,6 +118,23 @@ export const Header: React.FC = () => {
             aria-label={t('customerInfo')}
           >
             <User className="w-5 h-5" />
+          </button>
+
+          {/* Order History Trigger */}
+          <button
+            id="order-history-btn"
+            type="button"
+            onClick={() => setIsCustomerOrderHistoryOpen(true)}
+            className="relative w-9 h-9 flex items-center justify-center rounded-full text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+            title={language === 'th' ? 'ประวัติรายการสั่งซื้อ' : 'Order History'}
+            aria-label="Order History"
+          >
+            <Receipt className="w-5 h-5 text-gray-700" />
+            {customerOrderHistory.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-[#E65100] text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                {customerOrderHistory.length > 9 ? '9+' : customerOrderHistory.length}
+              </span>
+            )}
           </button>
 
           {/* Favorites Drawer Trigger */}

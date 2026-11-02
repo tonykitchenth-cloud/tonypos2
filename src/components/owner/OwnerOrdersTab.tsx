@@ -44,7 +44,9 @@ import {
   Check,
   Copy,
   ExternalLink,
+  HardDrive,
 } from 'lucide-react';
+import { OwnerOrderHistoryModal } from './OwnerOrderHistoryModal';
 
 export const OwnerOrdersTab: React.FC = () => {
   const {
@@ -71,6 +73,7 @@ export const OwnerOrdersTab: React.FC = () => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
+  const [isOwnerHistoryModalOpen, setIsOwnerHistoryModalOpen] = useState<boolean>(false);
 
   // Rider link copy status
   const [copiedRiderLink, setCopiedRiderLink] = useState(false);
@@ -537,6 +540,18 @@ export const OwnerOrdersTab: React.FC = () => {
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>{t('logExternalOrder')}</span>
+            </button>
+
+            {/* Local Device History Ledger Button */}
+            <button
+              id="btn-owner-local-history"
+              type="button"
+              onClick={() => setIsOwnerHistoryModalOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700 shrink-0"
+              title={language === 'th' ? 'ประวัติออเดอร์ในเครื่องร้านค้า (บันทึกไว้อย่างน้อย 20 รายการ)' : 'Store Local Ledger (20+ orders)'}
+            >
+              <HardDrive className="w-4 h-4 text-orange-400" />
+              <span>{language === 'th' ? 'ประวัติในเครื่อง (20+)' : 'Local Ledger (20+)'}</span>
             </button>
           </div>
         </div>
@@ -1586,6 +1601,12 @@ export const OwnerOrdersTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 📜 Store On-Device Local History Modal (at least 20 orders preserved locally) */}
+      <OwnerOrderHistoryModal
+        isOpen={isOwnerHistoryModalOpen}
+        onClose={() => setIsOwnerHistoryModalOpen(false)}
+      />
     </div>
   );
 };

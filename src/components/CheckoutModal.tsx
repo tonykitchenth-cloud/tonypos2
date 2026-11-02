@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { CustomerProfile, OrderType, PaymentMethod, OrderItemSnapshot } from '../types';
+import { CustomerProfile, OrderType, PaymentMethod, OrderItemSnapshot, RestaurantOrder } from '../types';
 import { formatCurrency } from '../utils/pricing';
 import { generateOrderMessage, buildWhatsAppUrl, buildLineUrl } from '../utils/orderMessageGenerator';
 import { CreateOrderParams } from '../utils/orderSync';
+import { saveCustomerOrder } from '../utils/orderHistory';
 import {
   X,
   User,
@@ -168,6 +169,44 @@ export const CheckoutModal: React.FC = () => {
 
     const whatsAppUrl = buildWhatsAppUrl(settings.whatsAppIntlNumber, orderMessage);
     const lineUrl = buildLineUrl(settings.lineId);
+
+    // Save into on-device order history as proof
+    try {
+      const externalOrderSnapshot: RestaurantOrder = {
+        id: `ext_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        orderNumber: 0,
+        orderNumberFormatted: channel === 'line' ? 'LINE Order' : 'WhatsApp Order',
+        source: channel,
+        status: 'pending',
+        orderType,
+        paymentMethod,
+        customer: updatedProfile,
+        items: cart.map((item) => ({
+          menuItemId: item.menuItemId,
+          name: item.menuItemName,
+          imageUrl: item.imageUrl,
+          basePrice: item.basePrice,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+          selectedModifiers: item.selectedModifiers.map((mod) => ({
+            groupId: mod.groupId,
+            groupName: mod.groupName,
+            optionId: mod.optionId,
+            optionName: mod.optionName,
+            priceAdjustment: mod.priceAdjustment,
+          })),
+          specialRequest: item.specialRequest,
+        })),
+        subtotal: cartSubtotal,
+        total: cartSubtotal,
+        currencySymbol: settings.currencySymbol || '฿',
+        createdAt: new Date().toISOString(),
+      };
+      saveCustomerOrder(externalOrderSnapshot);
+    } catch (e) {
+      console.warn('Failed to save external order to local history:', e);
+    }
 
     // 5. Channel execution
     if (channel === 'whatsapp') {

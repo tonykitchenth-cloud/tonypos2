@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { CustomerProfile, OrderType } from '../types';
-import { X, User, Phone, MapPin, Check, Save, Smartphone } from 'lucide-react';
+import { X, User, Phone, MapPin, Check, Save, Smartphone, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { IOSInstallGuideModal } from './IOSInstallGuideModal';
@@ -14,6 +14,8 @@ export const CustomerProfileModal: React.FC = () => {
     setIsCustomerProfileOpen,
     customerProfile,
     updateCustomerProfile,
+    customerOrderHistory,
+    setIsCustomerOrderHistoryOpen,
     language,
     t,
   } = useRestaurant();
@@ -102,6 +104,38 @@ export const CustomerProfileModal: React.FC = () => {
               aria-label="Close"
             >
               <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Order History Quick Link */}
+          <div className="mb-4">
+            <button
+              type="button"
+              id="profile-order-history-btn"
+              onClick={() => {
+                setIsCustomerProfileOpen(false);
+                setIsCustomerOrderHistoryOpen(true);
+              }}
+              className="w-full p-3 rounded-2xl bg-orange-50 hover:bg-orange-100/80 border border-orange-200/80 text-left flex items-center justify-between gap-2.5 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-xs">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-[#1A1A1A] block">
+                    {language === 'th' ? 'ประวัติรายการสั่งซื้อของฉัน' : 'My Order History'}
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    {language === 'th'
+                      ? `บันทึกไว้ในเครื่อง ${customerOrderHistory.length} รายการ (ดูใบเสร็จหลักฐาน)`
+                      : `${customerOrderHistory.length} saved on device (view receipts)`}
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-[#E65100] group-hover:translate-x-0.5 transition-transform">
+                &gt;
+              </span>
             </button>
           </div>
 

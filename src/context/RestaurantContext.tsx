@@ -45,6 +45,10 @@ import {
   cleanupStaleLocalOrders,
 } from '../utils/orderSync';
 import {
+  getCustomerOrderHistory,
+  syncOwnerOrderHistory,
+} from '../utils/orderHistory';
+import {
   startContinuousOrderAlarm,
   stopContinuousOrderAlarm,
   isAlarmPlaying as checkAlarmPlaying,
@@ -117,6 +121,10 @@ interface RestaurantContextType {
   setIsFavoritesOpen: (open: boolean) => void;
   isCustomerProfileOpen: boolean;
   setIsCustomerProfileOpen: (open: boolean) => void;
+  isCustomerOrderHistoryOpen: boolean;
+  setIsCustomerOrderHistoryOpen: (open: boolean) => void;
+  customerOrderHistory: RestaurantOrder[];
+  refreshCustomerOrderHistory: () => void;
   isClosedModalOpen: boolean;
   setIsClosedModalOpen: (open: boolean) => void;
 
@@ -190,6 +198,24 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState<boolean>(false);
   const [isCustomerProfileOpen, setIsCustomerProfileOpen] = useState<boolean>(false);
+  const [isCustomerOrderHistoryOpen, setIsCustomerOrderHistoryOpen] = useState<boolean>(false);
+  const [customerOrderHistory, setCustomerOrderHistory] = useState<RestaurantOrder[]>(() => getCustomerOrderHistory());
+
+  const refreshCustomerOrderHistory = useCallback(() => {
+    setCustomerOrderHistory(getCustomerOrderHistory());
+  }, []);
+
+  // Sync customer order history whenever updated
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCustomerOrderHistory(getCustomerOrderHistory());
+    };
+    window.addEventListener('customer_order_history_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('customer_order_history_updated', handleUpdate);
+    };
+  }, []);
+
   const [isClosedModalOpen, setIsClosedModalOpen] = useState<boolean>(false);
 
   // Owner Portal - Persist authentication session across browser refreshes
@@ -255,6 +281,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const unsubscribe = subscribeToAllOrders(
       (orders) => {
         setAllOrders(orders);
+        syncOwnerOrderHistory(orders);
       },
       (err) => {
         console.warn('Orders sync notice:', err);
@@ -781,6 +808,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsFavoritesOpen,
         isCustomerProfileOpen,
         setIsCustomerProfileOpen,
+        isCustomerOrderHistoryOpen,
+        setIsCustomerOrderHistoryOpen,
+        customerOrderHistory,
+        refreshCustomerOrderHistory,
         isClosedModalOpen,
         setIsClosedModalOpen,
         activeOrderId,

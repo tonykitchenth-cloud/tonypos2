@@ -22,6 +22,11 @@ import {
   PaymentMethod,
   OrderItemSnapshot,
 } from '../types';
+import {
+  saveCustomerOrder,
+  saveOwnerOrder,
+  updateCustomerOrderStatus,
+} from './orderHistory';
 
 export const ORDERS_COLLECTION = 'orders';
 export const COUNTERS_COLLECTION = 'counters';
@@ -289,6 +294,12 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
   }
   saveActiveOrderId(orderId);
 
+  // Automatically save into Customer's on-device history (retains at least 20 orders as proof)
+  saveCustomerOrder(newOrder);
+
+  // Automatically save into Store Owner's on-device history ledger
+  saveOwnerOrder(newOrder);
+
   // Broadcast new order to any open owner tabs immediately
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
     try {
@@ -546,6 +557,9 @@ export async function updateOrderStatus(
   }
 
   await updateDoc(docRef, updates);
+
+  // Update on-device order history status
+  updateCustomerOrderStatus(orderId, status, updates);
 
   // Broadcast immediate update across all browser tabs / windows
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
