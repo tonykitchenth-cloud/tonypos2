@@ -187,8 +187,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isAlarmActive, setIsAlarmActive] = useState<boolean>(false);
   const previousPendingCountRef = useRef<number>(0);
 
-  // Dynamic UI filters
-  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
+  // Dynamic UI filters (default to first category, "All Dishes" removed)
+  const [activeCategoryId, setActiveCategoryId] = useState<string>(() => {
+    try {
+      const state = loadAppState();
+      return state.categories[0]?.id || 'cat-rice';
+    } catch {
+      return 'cat-rice';
+    }
+  });
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Modals and Drawers
@@ -213,6 +220,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     window.addEventListener('customer_order_history_updated', handleUpdate);
     return () => {
       window.removeEventListener('customer_order_history_updated', handleUpdate);
+    };
+  }, []);
+
+  // Sync customer profile whenever updated from storage or modals
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      setCustomerProfileState(loadCustomerProfile());
+    };
+    window.addEventListener('customer_profile_updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('customer_profile_updated', handleProfileUpdate);
     };
   }, []);
 

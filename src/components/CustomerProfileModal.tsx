@@ -8,6 +8,8 @@ import { IOSInstallGuideModal } from './IOSInstallGuideModal';
 import { AndroidInstallGuideModal } from './AndroidInstallGuideModal';
 import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 
+import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
+
 export const CustomerProfileModal: React.FC = () => {
   const {
     isCustomerProfileOpen,
@@ -40,17 +42,31 @@ export const CustomerProfileModal: React.FC = () => {
   const [notes, setNotes] = useState<string>(customerProfile.notes || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // Sync profile data whenever modal opens or customerProfile changes
+  React.useEffect(() => {
+    if (isCustomerProfileOpen) {
+      const current = (customerProfile?.name || customerProfile?.phone) ? customerProfile : loadCustomerProfile();
+      setName(current.name || '');
+      setPhone(current.phone || '');
+      setAddress(current.deliveryAddress || '');
+      setOrderType(current.orderType || 'pickup');
+      setNotes(current.notes || '');
+    }
+  }, [isCustomerProfileOpen, customerProfile]);
+
   if (!isCustomerProfileOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    updateCustomerProfile({
+    const updated: CustomerProfile = {
       name: name.trim(),
       phone: phone.trim(),
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
-    });
+    };
+    saveCustomerProfile(updated);
+    updateCustomerProfile(updated);
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);

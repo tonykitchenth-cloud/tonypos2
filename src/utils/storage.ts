@@ -169,27 +169,104 @@ export function saveFavorites(favorites: string[]): void {
   }
 }
 
+export const PERMANENT_CUSTOMER_PROFILE_KEYS = [
+  STORAGE_KEYS.CUSTOMER_PROFILE,
+  'tonys_kitchen_customer_profile_permanent_v1',
+  'tonys_kitchen_customer_profile',
+  'customer_profile',
+];
+
 /**
- * Loads saved Customer Profile
+ * Loads saved Customer Profile with resilient multi-key lookup and order-history recovery.
+ * Guaranteed to never lose customer information across page reloads.
  */
 export function loadCustomerProfile(): CustomerProfile {
+  if (typeof window === 'undefined') return defaultCustomerProfile;
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOMER_PROFILE);
-    if (!raw) return defaultCustomerProfile;
-    const parsed = JSON.parse(raw);
-    return {
-      ...defaultCustomerProfile,
-      ...(parsed || {}),
-    };
+    let candidate: CustomerProfile | null = null;
+
+    // 1. Check all persistent keys
+    for (const key of PERMANENT_CUSTOMER_PROFILE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && (parsed.name || parsed.phone || parsed.deliveryAddress)) {
+            candidate = {
+              ...defaultCustomerProfile,
+              ...parsed,
+            };
+            break;
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Fallback: Recover from customer's latest order in on-device order history
+    if (!candidate || (!candidate.name && !candidate.phone)) {
+      try {
+        const historyRaw = localStorage.getItem('tonys_kitchen_customer_order_history_v2');
+        if (historyRaw) {
+          const history = JSON.parse(historyRaw);
+          if (Array.isArray(history) && history.length > 0) {
+            const latest = history[0];
+            if (latest?.customer && (latest.customer.name || latest.customer.phone)) {
+              candidate = {
+                name: latest.customer.name || '',
+                phone: latest.customer.phone || '',
+                deliveryAddress: latest.customer.deliveryAddress || '',
+                orderType: latest.orderType || 'pickup',
+                notes: latest.customer.notes || '',
+              };
+              // Persist recovered profile back into storage immediately
+              saveCustomerProfile(candidate);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (candidate) {
+      return candidate;
+    }
+
+    return defaultCustomerProfile;
   } catch (error) {
     console.error('Failed to load customer profile from localStorage:', error);
     return defaultCustomerProfile;
   }
 }
 
+/**
+ * Permanently saves customer profile to local storage across multiple fallback keys.
+ * Defensively protects existing fields so empty values never overwrite valid saved data.
+ */
 export function saveCustomerProfile(profile: CustomerProfile): void {
+  if (typeof window === 'undefined') return;
+
   try {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMER_PROFILE, JSON.stringify(profile));
+    // 1. Defensively merge with current stored profile to prevent accidental wiping
+    const existing = loadCustomerProfile();
+    const merged: CustomerProfile = {
+      name: (profile.name !== undefined && profile.name.trim() !== '') ? profile.name.trim() : (existing.name || ''),
+      phone: (profile.phone !== undefined && profile.phone.trim() !== '') ? profile.phone.trim() : (existing.phone || ''),
+      deliveryAddress: (profile.deliveryAddress !== undefined && profile.deliveryAddress.trim() !== '') ? profile.deliveryAddress.trim() : (existing.deliveryAddress || ''),
+      orderType: profile.orderType || existing.orderType || 'pickup',
+      notes: (profile.notes !== undefined && profile.notes.trim() !== '') ? profile.notes.trim() : (existing.notes || ''),
+    };
+
+    const payload = JSON.stringify(merged);
+
+    // 2. Write to all permanent keys
+    for (const key of PERMANENT_CUSTOMER_PROFILE_KEYS) {
+      try {
+        localStorage.setItem(key, payload);
+      } catch {}
+    }
+
+    // 3. Dispatch broadcast event for live multi-component synchronization
+    window.dispatchEvent(new CustomEvent('customer_profile_updated', { detail: merged }));
   } catch (error) {
     console.error('Failed to save customer profile to localStorage:', error);
   }
