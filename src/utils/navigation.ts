@@ -1,9 +1,9 @@
-export type AppRoute = 'customer' | 'owner';
+export type AppRoute = 'customer' | 'owner' | 'rider';
 
 /**
- * Detects whether the current browser URL points to the Owner Dashboard (/owner)
- * or Customer Ordering (/), accounting for GitHub Pages repository subpaths, trailing slashes,
- * hash routing fallback, and SPA redirect search queries (?/owner).
+ * Detects whether the current browser URL points to the Rider View (/rider),
+ * Owner Dashboard (/owner), or Customer Ordering (/), accounting for GitHub Pages
+ * repository subpaths, trailing slashes, hash routing fallback, and SPA redirect search queries.
  */
 export function getAppRoute(): AppRoute {
   if (typeof window === 'undefined') return 'customer';
@@ -13,7 +13,29 @@ export function getAppRoute(): AppRoute {
   const hash = window.location.hash;
   const search = window.location.search;
 
-  // 2. Check if search query holds SPA redirect path (e.g. ?/owner or ?/owner/ or ?owner)
+  // 2. Rider View Route Match (?view=rider, ?rider, /rider, #/rider)
+  if (
+    search.startsWith('?/rider') ||
+    search.startsWith('?rider') ||
+    search.includes('view=rider') ||
+    search.includes('route=rider') ||
+    search.includes('/rider')
+  ) {
+    return 'rider';
+  }
+
+  if (
+    path.endsWith('/rider') ||
+    path === '/rider' ||
+    path.endsWith('/rider/index.html') ||
+    path.includes('/rider/') ||
+    hash === '#/rider' ||
+    hash === '#rider'
+  ) {
+    return 'rider';
+  }
+
+  // 3. Owner Dashboard Route Match (e.g. ?/owner or ?owner)
   if (
     search.startsWith('?/owner') ||
     search.startsWith('?owner') ||
@@ -22,7 +44,7 @@ export function getAppRoute(): AppRoute {
     return 'owner';
   }
 
-  // 3. Match pathname (/owner, /owner/, /owner/index.html, or /<repo-name>/owner) or hash (#/owner or #owner)
+  // Match pathname (/owner, /owner/, /owner/index.html, or /<repo-name>/owner) or hash (#/owner or #owner)
   if (
     path.endsWith('/owner') ||
     path === '/owner' ||
@@ -48,7 +70,7 @@ export function getBaseAppPath(): string {
   const segments = window.location.pathname.split('/').filter(Boolean);
 
   // If deployed on github.io with a repository subpath (e.g. /my-repo/ or /my-repo/owner)
-  if (isGitHub && segments.length > 0 && segments[0] !== 'owner') {
+  if (isGitHub && segments.length > 0 && segments[0] !== 'owner' && segments[0] !== 'rider') {
     return `/${segments[0]}/`;
   }
 
@@ -56,19 +78,35 @@ export function getBaseAppPath(): string {
 }
 
 /**
- * Navigates between Customer Ordering (/) and Owner Dashboard (/owner)
+ * Navigates between Customer Ordering (/), Owner Dashboard (/owner), and Rider View (/rider)
  * using the HTML5 History API while maintaining GitHub Pages compatibility.
  */
 export function navigateTo(route: AppRoute) {
   if (typeof window === 'undefined') return;
 
   const basePath = getBaseAppPath();
-  const targetPath = route === 'owner' ? `${basePath}owner` : basePath;
+  const targetPath =
+    route === 'owner'
+      ? `${basePath}owner`
+      : route === 'rider'
+      ? `${basePath}rider`
+      : basePath;
 
   if (window.location.pathname !== targetPath || window.location.search) {
     window.history.pushState({ route }, '', targetPath);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
+}
+
+/**
+ * Returns a universal, direct shareable URL for delivery riders
+ * that works seamlessly on GitHub Pages, custom domains, and local preview.
+ */
+export function getRiderShareUrl(): string {
+  if (typeof window === 'undefined') return '/?view=rider';
+  const origin = window.location.origin;
+  const basePath = getBaseAppPath();
+  return `${origin}${basePath}?view=rider`;
 }
 
 /**

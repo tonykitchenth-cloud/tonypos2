@@ -21,6 +21,7 @@ import { CustomerProfileModal } from './components/CustomerProfileModal';
 import { ClosedStoreModal } from './components/ClosedStoreModal';
 import { OwnerAccessModal } from './components/owner/OwnerAccessModal';
 import { OwnerDashboard } from './components/owner/OwnerDashboard';
+import { RiderDashboard } from './components/rider/RiderDashboard';
 import { formatCurrency } from './utils/pricing';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -168,7 +169,12 @@ const AppRouter: React.FC = () => {
     };
   }, []);
 
-  // 1. Dedicated Owner Dashboard Route (/owner)
+  // 1. Dedicated Rider Delivery View Route (/rider or ?view=rider)
+  if (currentRoute === 'rider') {
+    return <RiderDashboard />;
+  }
+
+  // 2. Dedicated Owner Dashboard Route (/owner)
   if (currentRoute === 'owner') {
     if (!isOwnerMode) {
       return <OwnerLoginPage />;
@@ -176,7 +182,7 @@ const AppRouter: React.FC = () => {
     return <OwnerDashboard />;
   }
 
-  // 2. Public Customer Ordering Route (/)
+  // 3. Public Customer Ordering Route (/)
   return <MainCustomerView />;
 };
 

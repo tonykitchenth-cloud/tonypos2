@@ -55,6 +55,7 @@ import {
   Bell,
   Volume2,
   Loader2,
+  Bike,
 } from 'lucide-react';
 
 type OwnerTab =
@@ -501,6 +502,17 @@ export const OwnerDashboard: React.FC = () => {
             title="View Public Customer Menu"
           >
             <span>{language === 'th' ? 'ดูหน้าสั่งอาหารลูกค้า' : 'Customer Menu'}</span>
+          </button>
+
+          <button
+            type="button"
+            id="open-rider-view-btn"
+            onClick={() => navigateTo('rider')}
+            className="px-3 py-1.5 rounded-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-semibold transition-all cursor-pointer hidden sm:flex items-center gap-1.5"
+            title="Open Rider Delivery Portal"
+          >
+            <Bike className="w-3.5 h-3.5" />
+            <span>{language === 'th' ? 'หน้าจอ Rider' : 'Rider View'}</span>
           </button>
 
           <button

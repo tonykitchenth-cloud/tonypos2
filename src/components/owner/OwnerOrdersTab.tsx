@@ -18,6 +18,7 @@ import {
   unlockAudioContext,
   requestNotificationPermission,
 } from '../../utils/soundAlarm';
+import { getRiderShareUrl } from '../../utils/navigation';
 import {
   Bell,
   Volume2,
@@ -41,6 +42,8 @@ import {
   ChevronRight,
   FileText,
   Check,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 
 export const OwnerOrdersTab: React.FC = () => {
@@ -68,6 +71,30 @@ export const OwnerOrdersTab: React.FC = () => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
+
+  // Rider link copy status
+  const [copiedRiderLink, setCopiedRiderLink] = useState(false);
+
+  const handleCopyRiderLink = async () => {
+    const url = getRiderShareUrl();
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedRiderLink(true);
+      setTimeout(() => setCopiedRiderLink(false), 3000);
+    } catch {
+      setCopiedRiderLink(true);
+      setTimeout(() => setCopiedRiderLink(false), 3000);
+    }
+  };
 
   // Reorderable Status Filter Tabs State (Supports Mouse Drag & Drop and Left-Right Arrow Reordering)
   type StatusTabKey = 'pending_accepted' | 'on_the_way' | 'completed' | 'cancelled' | 'all';
@@ -283,7 +310,7 @@ export const OwnerOrdersTab: React.FC = () => {
   const filteredOrders = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
 
-    return allOrders.filter((order) => {
+    const result = allOrders.filter((order) => {
       // Date filter (active pending/accepted orders in the kitchen are always visible)
       if (activeDateFilter === 'today' && order.status !== 'pending' && order.status !== 'accepted') {
         const orderDate = new Date(order.createdAt).toISOString().split('T')[0];
@@ -302,11 +329,17 @@ export const OwnerOrdersTab: React.FC = () => {
         }
         return order.status === 'pending' || order.status === 'accepted';
       } else if (statusFilter === 'on_the_way') {
-        if (
-          order.status !== 'on_the_way' ||
-          order.orderNumber === 1027 ||
-          order.orderNumberFormatted === '#1027'
-        ) {
+        if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
+          return false;
+        }
+        // Keep active on_the_way orders, plus recently completed orders (within last 3 minutes)
+        // so the restaurant owner watches the "Complete Order" button automatically switch to "JOB DONE" in real time!
+        const isRecentlyCompleted =
+          order.status === 'completed' &&
+          order.completedAt &&
+          Date.now() - new Date(order.completedAt).getTime() < 180000;
+
+        if (order.status !== 'on_the_way' && !isRecentlyCompleted) {
           return false;
         }
       } else if (statusFilter === 'completed') {
@@ -348,15 +381,27 @@ export const OwnerOrdersTab: React.FC = () => {
 
       return true;
     });
+
+    // เรียงลำดับ มาก่อน อยู่บน มาใหม่อยู่ล่าง (Oldest on top, newly arrived orders at bottom)
+    return result.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+        return timeA - timeB;
+      }
+      return (a.orderNumber || 0) - (b.orderNumber || 0);
+    });
   }, [allOrders, activeDateFilter, sourceFilter, statusFilter, typeFilter, searchQuery]);
 
   const latestPendingOrder = useMemo(() => {
-    return allOrders.find(
-      (o) =>
-        o.status === 'pending' &&
-        o.orderNumber !== 1027 &&
-        o.orderNumberFormatted !== '#1027'
-    );
+    return allOrders
+      .filter(
+        (o) =>
+          o.status === 'pending' &&
+          o.orderNumber !== 1027 &&
+          o.orderNumberFormatted !== '#1027'
+      )
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
   }, [allOrders]);
 
   const handlePrintReceipt = (order: RestaurantOrder) => {
@@ -456,7 +501,33 @@ export const OwnerOrdersTab: React.FC = () => {
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Copy Rider Link Button */}
+            <button
+              id="btn-copy-rider-link"
+              type="button"
+              onClick={handleCopyRiderLink}
+              title={getRiderShareUrl()}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                copiedRiderLink
+                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/30'
+                  : 'bg-neutral-800 hover:bg-neutral-700 text-orange-400 border-neutral-700'
+              }`}
+            >
+              {copiedRiderLink ? (
+                <>
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                  <span>{language === 'th' ? 'คัดลอกลิงก์ Rider แล้ว!' : 'Copied Rider Link!'}</span>
+                </>
+              ) : (
+                <>
+                  <Bike className="w-4 h-4" />
+                  <span>{language === 'th' ? 'ลิงก์สำหรับ Rider' : 'Rider Link'}</span>
+                  <Copy className="w-3.5 h-3.5 opacity-80" />
+                </>
+              )}
+            </button>
+
             {/* + Add External Order Button */}
             <button
               id="btn-add-external-order"
@@ -839,7 +910,7 @@ export const OwnerOrdersTab: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="flex flex-col gap-3">
           {filteredOrders.map((order) => {
             const isPending = order.status === 'pending';
             const isAccepted = order.status === 'accepted';
@@ -858,7 +929,7 @@ export const OwnerOrdersTab: React.FC = () => {
                 key={order.id}
                 id={`order-card-${order.id}`}
                 onClick={() => setSelectedOrderForDetail(order)}
-                className={`bg-neutral-900 border rounded-2xl p-4 flex flex-col justify-between shadow-lg transition-all cursor-pointer hover:border-orange-500/50 group ${
+                className={`bg-neutral-900 border rounded-2xl p-4 sm:p-5 shadow-lg transition-all cursor-pointer hover:border-orange-500/50 group flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
                   isPending
                     ? 'border-amber-500/60 ring-2 ring-amber-500/20 shadow-amber-500/10'
                     : isOnTheWay
@@ -870,35 +941,28 @@ export const OwnerOrdersTab: React.FC = () => {
                     : 'border-neutral-800/80 opacity-70'
                 }`}
               >
-                {/* Card Top: Order Number, Customer Name, Badges */}
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-neutral-800">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-base sm:text-lg font-black text-white group-hover:text-orange-400 transition-colors">
-                          {order.orderNumberFormatted}
-                        </span>
-                        {/* Channel Badge */}
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            order.source === 'in_app'
-                              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                              : order.source === 'whatsapp'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-green-500/20 text-green-400 border border-green-500/30'
-                          }`}
-                        >
-                          {order.source.replace('_', '-')}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-neutral-400">
-                        {formattedTime} • {formattedDate}
-                      </span>
-                    </div>
-
-                    {/* Status Pill */}
+                {/* 1. Left Compartment: Order Number, Channel Badge, Status, Order Type, Time */}
+                <div className="flex flex-row lg:flex-col items-center lg:items-start justify-between lg:justify-center gap-2 lg:w-52 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-base sm:text-xl font-black text-white group-hover:text-orange-400 transition-colors">
+                      {order.orderNumberFormatted}
+                    </span>
                     <span
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 ${
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        order.source === 'in_app'
+                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                          : order.source === 'whatsapp'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      }`}
+                    >
+                      {order.source.replace('_', '-')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-lg text-xs font-bold shrink-0 ${
                         isPending
                           ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
                           : isOnTheWay
@@ -920,49 +984,53 @@ export const OwnerOrdersTab: React.FC = () => {
                         ? t('statusStepCompleted')
                         : t('statusStepCancelled')}
                     </span>
+
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-neutral-300 bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800">
+                      {isDelivery ? (
+                        <Bike className="w-3 h-3 text-orange-400" />
+                      ) : (
+                        <Store className="w-3 h-3 text-emerald-400" />
+                      )}
+                      <span>{isDelivery ? t('delivery') : t('pickup')}</span>
+                    </span>
                   </div>
 
-                  {/* Customer Information (ONLY Customer Name & Basic Info as requested) */}
-                  <div className="bg-neutral-950/60 p-3 rounded-xl border border-neutral-800/80 space-y-2 text-xs text-neutral-300">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-neutral-500 block">
-                          {language === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
-                        </span>
-                        <span className="font-extrabold text-white text-base">
-                          {order.customer?.name || 'Customer'}
-                        </span>
-                      </div>
+                  <span className="text-[11px] text-neutral-400 font-mono">
+                    {formattedTime} • {formattedDate}
+                  </span>
+                </div>
 
+                {/* 2. Middle Compartment: Customer Name, Phone, Payment & Tap Prompt */}
+                <div className="flex-1 min-w-0 space-y-2 lg:px-4 lg:border-x lg:border-neutral-800/80">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-500 block">
+                        {language === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
+                      </span>
+                      <span className="font-extrabold text-white text-base sm:text-lg">
+                        {order.customer?.name || 'Customer'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       {order.customer?.phone && order.customer.phone !== '-' ? (
                         <a
                           href={`tel:${order.customer.phone}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-orange-400 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-orange-400 text-xs font-semibold flex items-center gap-1 transition-colors"
                         >
                           <Phone className="w-3 h-3" />
                           <span>{order.customer.phone}</span>
                         </a>
                       ) : null}
-                    </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-neutral-400 pt-0.5">
-                      <span className="flex items-center gap-1 font-semibold text-neutral-300">
-                        {isDelivery ? (
-                          <Bike className="w-3.5 h-3.5 text-orange-400" />
-                        ) : (
-                          <Store className="w-3.5 h-3.5 text-emerald-400" />
-                        )}
-                        {isDelivery ? t('delivery') : t('pickup')}
-                      </span>
-                      <span>•</span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleTogglePayment(order);
                         }}
-                        className={`flex items-center gap-1 font-semibold transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-lg bg-neutral-950/80 border border-neutral-800 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
                           order.paymentStatus === 'paid'
                             ? 'text-emerald-400'
                             : 'text-amber-400 hover:underline'
@@ -982,11 +1050,11 @@ export const OwnerOrdersTab: React.FC = () => {
                   </div>
 
                   {/* Tap Card for Full Details Prompt */}
-                  <div className="p-2 rounded-xl bg-neutral-950/40 border border-neutral-800/80 group-hover:border-orange-500/40 transition-colors flex items-center justify-between text-xs text-neutral-400">
-                    <div className="flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-orange-400 group-hover:scale-110 transition-transform" />
-                      <span className="font-semibold text-neutral-300">
-                        {language === 'th' ? 'กดที่การ์ดเพื่อดูรายละเอียดอาหาร' : 'Tap to view full order details'}
+                  <div className="p-2.5 rounded-xl bg-neutral-950/50 border border-neutral-800/80 group-hover:border-orange-500/40 transition-colors flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-orange-400 group-hover:scale-110 transition-transform" />
+                      <span className="font-semibold text-neutral-200">
+                        {language === 'th' ? 'กดที่การ์ดเพื่อดูรายละเอียดอาหารทั้งหมด' : 'Tap to view full order details'}
                       </span>
                     </div>
                     <span className="text-[11px] font-bold text-orange-400">
@@ -995,17 +1063,19 @@ export const OwnerOrdersTab: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Card Bottom: Total & Status Action Buttons */}
-                <div className="pt-3 border-t border-neutral-800 space-y-2 mt-3">
-                  <div className="flex items-center justify-between text-sm">
+                {/* 3. Right Compartment: Total & Action Buttons */}
+                <div
+                  className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-3 lg:w-56 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-neutral-800"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-baseline lg:flex-col lg:items-end justify-between sm:justify-start gap-1">
                     <span className="text-xs font-bold text-neutral-400">{t('total')}:</span>
-                    <span className="font-mono text-base font-black text-orange-400">
+                    <span className="font-mono text-lg sm:text-2xl font-black text-orange-400">
                       ฿{order.total.toLocaleString()}
                     </span>
                   </div>
 
-                  {/* Action Buttons based on Status */}
-                  <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className="w-full space-y-1.5">
                     {isPending && (
                       <div className="grid grid-cols-2 gap-2">
                         <button
