@@ -37,6 +37,10 @@ import {
   Plus,
   X,
   MessageCircle,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Check,
 } from 'lucide-react';
 
 export const OwnerOrdersTab: React.FC = () => {
@@ -60,9 +64,72 @@ export const OwnerOrdersTab: React.FC = () => {
 
   // Selected Order for Receipt Printing or Detailed Modal
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<RestaurantOrder | null>(null);
+  const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<RestaurantOrder | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
+
+  // Reorderable Status Filter Tabs State (Supports Mouse Drag & Drop and Left-Right Arrow Reordering)
+  type StatusTabKey = 'pending_accepted' | 'on_the_way' | 'completed' | 'cancelled' | 'all';
+  const INITIAL_STATUS_TABS: StatusTabKey[] = [
+    'pending_accepted',
+    'on_the_way',
+    'completed',
+    'cancelled',
+    'all',
+  ];
+
+  const [statusTabsOrder, setStatusTabsOrder] = useState<StatusTabKey[]>(() => {
+    if (typeof window === 'undefined') return INITIAL_STATUS_TABS;
+    try {
+      const saved = localStorage.getItem('tk_status_tabs_order');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === INITIAL_STATUS_TABS.length) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_STATUS_TABS;
+  });
+
+  const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null);
+
+  const moveStatusTab = (index: number, direction: 'left' | 'right') => {
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= statusTabsOrder.length) return;
+    const newOrder = [...statusTabsOrder];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    setStatusTabsOrder(newOrder);
+    try {
+      localStorage.setItem('tk_status_tabs_order', JSON.stringify(newOrder));
+    } catch {}
+  };
+
+  const handleTabDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedTabIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleTabDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleTabDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedTabIndex === null || draggedTabIndex === dropIndex) return;
+    const newOrder = [...statusTabsOrder];
+    const [removed] = newOrder.splice(draggedTabIndex, 1);
+    newOrder.splice(dropIndex, 0, removed);
+    setStatusTabsOrder(newOrder);
+    setDraggedTabIndex(null);
+    try {
+      localStorage.setItem('tk_status_tabs_order', JSON.stringify(newOrder));
+    } catch {}
+  };
 
   // Add External Order Modal State
   const [isAddExternalModalOpen, setIsAddExternalModalOpen] = useState<boolean>(false);
@@ -405,126 +472,332 @@ export const OwnerOrdersTab: React.FC = () => {
 
         {/* Multi-category filter tabs */}
         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          {/* Status Filter */}
+          {/* Status Filter - Reorderable via Mouse Drag & Drop AND Left-Right Arrow Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full custom-scrollbar">
-            <span className="text-neutral-500 text-[11px] font-semibold uppercase mr-1">
+            <span className="text-neutral-500 text-[11px] font-semibold uppercase mr-1 shrink-0">
               {t('status')}:
             </span>
 
-            {/* 1. Pending, Accepted button */}
-            <button
-              id="status-filter-pending-accepted"
-              type="button"
-              onClick={() => setStatusFilter('pending_accepted')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'pending_accepted'
-                  ? 'bg-amber-500 text-neutral-950 shadow-md shadow-amber-500/20'
-                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
-              }`}
-            >
-              <span>Pending, Accepted</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'pending_accepted'
-                    ? 'bg-neutral-950 text-amber-400 font-bold'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {pendingAcceptedCount}
-              </span>
-            </button>
+            {statusTabsOrder.map((tabKey, idx) => {
+              if (tabKey === 'pending_accepted') {
+                const isActive = statusFilter === 'pending_accepted';
+                return (
+                  <div
+                    key={tabKey}
+                    draggable
+                    onDragStart={(e) => handleTabDragStart(e, idx)}
+                    onDragOver={handleTabDragOver}
+                    onDrop={(e) => handleTabDrop(e, idx)}
+                    className={`flex items-center rounded-xl transition-all select-none shrink-0 ${
+                      draggedTabIndex === idx ? 'opacity-40 ring-2 ring-orange-400' : ''
+                    } ${
+                      isActive
+                        ? 'bg-amber-500 text-neutral-950 shadow-md shadow-amber-500/20'
+                        : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนซ้าย' : 'Move Left'}
+                      disabled={idx === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'left');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
 
-            {/* 2. On the way / Ready button */}
-            <button
-              id="status-filter-on-the-way"
-              type="button"
-              onClick={() => setStatusFilter('on_the_way')}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'on_the_way'
-                  ? 'bg-orange-500 text-neutral-950 shadow-md shadow-orange-500/20'
-                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
-              }`}
-            >
-              <span>On the way / Ready</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'on_the_way'
-                    ? 'bg-neutral-950 text-orange-400 font-bold'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {onTheWayReadyCount}
-              </span>
-            </button>
+                    <button
+                      id="status-filter-pending-accepted"
+                      type="button"
+                      onClick={() => setStatusFilter('pending_accepted')}
+                      className="px-2 py-1.5 text-[11px] font-extrabold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Pending, Accepted</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          isActive
+                            ? 'bg-neutral-950 text-amber-400 font-bold'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}
+                      >
+                        {pendingAcceptedCount}
+                      </span>
+                    </button>
 
-            {/* 2. Completed button */}
-            <button
-              id="status-filter-completed"
-              type="button"
-              onClick={() => setStatusFilter('completed')}
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'completed'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
-              }`}
-            >
-              <span>{t('status_completed')}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'completed'
-                    ? 'bg-emerald-950 text-emerald-200'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {completedOrdersCount}
-              </span>
-            </button>
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนขวา' : 'Move Right'}
+                      disabled={idx === statusTabsOrder.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'right');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              }
 
-            {/* 3. Cancelled button */}
-            <button
-              id="status-filter-cancelled"
-              type="button"
-              onClick={() => setStatusFilter('cancelled')}
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'cancelled'
-                  ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
-                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
-              }`}
-            >
-              <span>{t('status_cancelled')}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'cancelled'
-                    ? 'bg-red-950 text-red-200'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {cancelledOrdersCount}
-              </span>
-            </button>
+              if (tabKey === 'on_the_way') {
+                const isActive = statusFilter === 'on_the_way';
+                return (
+                  <div
+                    key={tabKey}
+                    draggable
+                    onDragStart={(e) => handleTabDragStart(e, idx)}
+                    onDragOver={handleTabDragOver}
+                    onDrop={(e) => handleTabDrop(e, idx)}
+                    className={`flex items-center rounded-xl transition-all select-none shrink-0 ${
+                      draggedTabIndex === idx ? 'opacity-40 ring-2 ring-orange-400' : ''
+                    } ${
+                      isActive
+                        ? 'bg-orange-500 text-neutral-950 shadow-md shadow-orange-500/20'
+                        : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนซ้าย' : 'Move Left'}
+                      disabled={idx === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'left');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
 
-            {/* 4. All button (moved to the end, after Cancelled) */}
-            <button
-              id="status-filter-all"
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                statusFilter === 'all'
-                  ? 'bg-neutral-700 text-white border border-neutral-600'
-                  : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
-              }`}
-            >
-              <span>{t('all')}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  statusFilter === 'all'
-                    ? 'bg-neutral-900 text-neutral-200'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {allOrdersCount}
-              </span>
-            </button>
+                    <button
+                      id="status-filter-on-the-way"
+                      type="button"
+                      onClick={() => setStatusFilter('on_the_way')}
+                      className="px-2 py-1.5 text-[11px] font-extrabold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>On the way</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          isActive
+                            ? 'bg-neutral-950 text-orange-400 font-bold'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}
+                      >
+                        {onTheWayReadyCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนขวา' : 'Move Right'}
+                      disabled={idx === statusTabsOrder.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'right');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              }
+
+              if (tabKey === 'completed') {
+                const isActive = statusFilter === 'completed';
+                return (
+                  <div
+                    key={tabKey}
+                    draggable
+                    onDragStart={(e) => handleTabDragStart(e, idx)}
+                    onDragOver={handleTabDragOver}
+                    onDrop={(e) => handleTabDrop(e, idx)}
+                    className={`flex items-center rounded-xl transition-all select-none shrink-0 ${
+                      draggedTabIndex === idx ? 'opacity-40 ring-2 ring-orange-400' : ''
+                    } ${
+                      isActive
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                        : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนซ้าย' : 'Move Left'}
+                      disabled={idx === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'left');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+
+                    <button
+                      id="status-filter-completed"
+                      type="button"
+                      onClick={() => setStatusFilter('completed')}
+                      className="px-2 py-1.5 text-[11px] font-bold capitalize flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>{t('status_completed')}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          isActive
+                            ? 'bg-emerald-950 text-emerald-200'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}
+                      >
+                        {completedOrdersCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนขวา' : 'Move Right'}
+                      disabled={idx === statusTabsOrder.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'right');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              }
+
+              if (tabKey === 'cancelled') {
+                const isActive = statusFilter === 'cancelled';
+                return (
+                  <div
+                    key={tabKey}
+                    draggable
+                    onDragStart={(e) => handleTabDragStart(e, idx)}
+                    onDragOver={handleTabDragOver}
+                    onDrop={(e) => handleTabDrop(e, idx)}
+                    className={`flex items-center rounded-xl transition-all select-none shrink-0 ${
+                      draggedTabIndex === idx ? 'opacity-40 ring-2 ring-orange-400' : ''
+                    } ${
+                      isActive
+                        ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+                        : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนซ้าย' : 'Move Left'}
+                      disabled={idx === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'left');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+
+                    <button
+                      id="status-filter-cancelled"
+                      type="button"
+                      onClick={() => setStatusFilter('cancelled')}
+                      className="px-2 py-1.5 text-[11px] font-bold capitalize flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>{t('status_cancelled')}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          isActive
+                            ? 'bg-red-950 text-red-200'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}
+                      >
+                        {cancelledOrdersCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      title={language === 'th' ? 'เลื่อนขวา' : 'Move Right'}
+                      disabled={idx === statusTabsOrder.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveStatusTab(idx, 'right');
+                      }}
+                      className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              }
+
+              // tabKey === 'all'
+              const isActive = statusFilter === 'all';
+              return (
+                <div
+                  key={tabKey}
+                  draggable
+                  onDragStart={(e) => handleTabDragStart(e, idx)}
+                  onDragOver={handleTabDragOver}
+                  onDrop={(e) => handleTabDrop(e, idx)}
+                  className={`flex items-center rounded-xl transition-all select-none shrink-0 ${
+                    draggedTabIndex === idx ? 'opacity-40 ring-2 ring-orange-400' : ''
+                  } ${
+                    isActive
+                      ? 'bg-neutral-700 text-white border border-neutral-600'
+                      : 'text-neutral-400 hover:text-white bg-neutral-950/60 border border-neutral-800'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    title={language === 'th' ? 'เลื่อนซ้าย' : 'Move Left'}
+                    disabled={idx === 0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveStatusTab(idx, 'left');
+                    }}
+                    className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3 h-3" />
+                  </button>
+
+                  <button
+                    id="status-filter-all"
+                    type="button"
+                    onClick={() => setStatusFilter('all')}
+                    className="px-2 py-1.5 text-[11px] font-bold capitalize flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>{t('all')}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        isActive
+                          ? 'bg-neutral-900 text-neutral-200'
+                          : 'bg-neutral-800 text-neutral-400'
+                      }`}
+                    >
+                      {allOrdersCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title={language === 'th' ? 'เลื่อนขวา' : 'Move Right'}
+                    disabled={idx === statusTabsOrder.length - 1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveStatusTab(idx, 'right');
+                    }}
+                    className="px-1 py-1.5 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <div className="h-4 w-px bg-neutral-800 hidden sm:block" />
@@ -584,7 +857,8 @@ export const OwnerOrdersTab: React.FC = () => {
               <div
                 key={order.id}
                 id={`order-card-${order.id}`}
-                className={`bg-neutral-900 border rounded-2xl p-4 flex flex-col justify-between shadow-lg transition-all ${
+                onClick={() => setSelectedOrderForDetail(order)}
+                className={`bg-neutral-900 border rounded-2xl p-4 flex flex-col justify-between shadow-lg transition-all cursor-pointer hover:border-orange-500/50 group ${
                   isPending
                     ? 'border-amber-500/60 ring-2 ring-amber-500/20 shadow-amber-500/10'
                     : isOnTheWay
@@ -596,12 +870,12 @@ export const OwnerOrdersTab: React.FC = () => {
                     : 'border-neutral-800/80 opacity-70'
                 }`}
               >
-                {/* Card Top: Order Number, Time & Badges */}
+                {/* Card Top: Order Number, Customer Name, Badges */}
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-neutral-800">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-base font-black text-white">
+                        <span className="font-mono text-base sm:text-lg font-black text-white group-hover:text-orange-400 transition-colors">
                           {order.orderNumberFormatted}
                         </span>
                         {/* Channel Badge */}
@@ -624,13 +898,11 @@ export const OwnerOrdersTab: React.FC = () => {
 
                     {/* Status Pill */}
                     <span
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 ${
                         isPending
                           ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
                           : isOnTheWay
-                          ? isDelivery
-                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                           : isAccepted
                           ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                           : isCompleted
@@ -639,9 +911,7 @@ export const OwnerOrdersTab: React.FC = () => {
                       }`}
                     >
                       {isOnTheWay
-                        ? isDelivery
-                          ? t('statusStepOnTheWay')
-                          : t('statusStepYourFoodReady')
+                        ? 'On the way'
                         : isAccepted
                         ? t('statusStepAccepted')
                         : isPending
@@ -652,16 +922,23 @@ export const OwnerOrdersTab: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Customer Information */}
-                  <div className="bg-neutral-950/60 p-3 rounded-xl border border-neutral-800/80 space-y-1.5 text-xs text-neutral-300">
+                  {/* Customer Information (ONLY Customer Name & Basic Info as requested) */}
+                  <div className="bg-neutral-950/60 p-3 rounded-xl border border-neutral-800/80 space-y-2 text-xs text-neutral-300">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white text-sm">
-                        {order.customer?.name || 'Customer'}
-                      </span>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-neutral-500 block">
+                          {language === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
+                        </span>
+                        <span className="font-extrabold text-white text-base">
+                          {order.customer?.name || 'Customer'}
+                        </span>
+                      </div>
+
                       {order.customer?.phone && order.customer.phone !== '-' ? (
                         <a
                           href={`tel:${order.customer.phone}`}
-                          className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-orange-400 text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-orange-400 text-xs font-semibold flex items-center gap-1 transition-colors"
                         >
                           <Phone className="w-3 h-3" />
                           <span>{order.customer.phone}</span>
@@ -670,7 +947,7 @@ export const OwnerOrdersTab: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 text-[11px] text-neutral-400 pt-0.5">
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 font-semibold text-neutral-300">
                         {isDelivery ? (
                           <Bike className="w-3.5 h-3.5 text-orange-400" />
                         ) : (
@@ -681,7 +958,10 @@ export const OwnerOrdersTab: React.FC = () => {
                       <span>•</span>
                       <button
                         type="button"
-                        onClick={() => handleTogglePayment(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePayment(order);
+                        }}
                         className={`flex items-center gap-1 font-semibold transition-colors cursor-pointer ${
                           order.paymentStatus === 'paid'
                             ? 'text-emerald-400'
@@ -699,65 +979,24 @@ export const OwnerOrdersTab: React.FC = () => {
                         </span>
                       </button>
                     </div>
-
-                    {isDelivery && order.customer.deliveryAddress && (
-                      <div className="pt-1.5 border-t border-neutral-800/60 flex items-start gap-1.5 text-[11px] text-neutral-300">
-                        <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
-                        <span className="leading-snug">{order.customer.deliveryAddress}</span>
-                      </div>
-                    )}
-
-                    {order.customer.notes && (
-                      <div className="pt-1 text-[11px] text-amber-300/90 italic">
-                        Note: "{order.customer.notes}"
-                      </div>
-                    )}
                   </div>
 
-                  {/* Items List Snapshot */}
-                  <div className="space-y-1.5 py-1">
-                    <span className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider block">
-                      {t('items')} ({order.items.length})
-                    </span>
-                    <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar pr-1">
-                      {order.items.map((item, iIdx) => (
-                        <div
-                          key={iIdx}
-                          className="flex justify-between items-start text-xs text-neutral-300 bg-neutral-950/30 p-1.5 rounded-lg"
-                        >
-                          <div className="flex-1 pr-2">
-                            <div className="font-semibold text-white">
-                              <span className="text-orange-400 font-bold mr-1.5">
-                                {item.quantity}×
-                              </span>
-                              {item.name?.[language] || item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}
-                            </div>
-                            {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                              <div className="text-[10px] text-neutral-400 pl-4 space-y-0.5">
-                                {item.selectedModifiers.map((m, mIdx) => (
-                                   <div key={mIdx}>
-                                    + {m.optionName?.[language] || m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '')}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {item.specialRequest && (
-                              <p className="text-[10px] text-amber-300/80 italic pl-4">
-                                "{item.specialRequest}"
-                              </p>
-                            )}
-                          </div>
-                          <span className="font-mono font-semibold text-neutral-200">
-                            ฿{item.subtotal.toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
+                  {/* Tap Card for Full Details Prompt */}
+                  <div className="p-2 rounded-xl bg-neutral-950/40 border border-neutral-800/80 group-hover:border-orange-500/40 transition-colors flex items-center justify-between text-xs text-neutral-400">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-orange-400 group-hover:scale-110 transition-transform" />
+                      <span className="font-semibold text-neutral-300">
+                        {language === 'th' ? 'กดที่การ์ดเพื่อดูรายละเอียดอาหาร' : 'Tap to view full order details'}
+                      </span>
                     </div>
+                    <span className="text-[11px] font-bold text-orange-400">
+                      {order.items?.length || 0} {language === 'th' ? 'รายการ' : 'items'} &gt;
+                    </span>
                   </div>
                 </div>
 
-                {/* Card Bottom Actions */}
-                <div className="pt-3 border-t border-neutral-800 space-y-2.5 mt-3">
+                {/* Card Bottom: Total & Status Action Buttons */}
+                <div className="pt-3 border-t border-neutral-800 space-y-2 mt-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-xs font-bold text-neutral-400">{t('total')}:</span>
                     <span className="font-mono text-base font-black text-orange-400">
@@ -766,7 +1005,7 @@ export const OwnerOrdersTab: React.FC = () => {
                   </div>
 
                   {/* Action Buttons based on Status */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
                     {isPending && (
                       <div className="grid grid-cols-2 gap-2">
                         <button
@@ -798,19 +1037,11 @@ export const OwnerOrdersTab: React.FC = () => {
                         id={`btn-ontheway-order-${order.id}`}
                         type="button"
                         disabled={isUpdatingStatus === order.id}
-                        onClick={() => handleStatusChange(order.id, 'completed')}
-                        className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer ${
-                          isDelivery
-                            ? 'bg-orange-500 hover:bg-orange-600 text-neutral-950 shadow-orange-500/20'
-                            : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
-                        }`}
+                        onClick={() => handleStatusChange(order.id, 'on_the_way')}
+                        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md bg-orange-500 hover:bg-orange-600 text-neutral-950 shadow-orange-500/20 transition-all cursor-pointer"
                       >
-                        {isDelivery ? <Bike className="w-4 h-4" /> : <Store className="w-4 h-4" />}
-                        <span>
-                          {isDelivery
-                            ? `${t('onTheWayBtn')} / ${t('completeOrderBtn')}`
-                            : `${t('yourFoodReadyBtn')} / ${t('completeOrderBtn')}`}
-                        </span>
+                        <Bike className="w-4 h-4" />
+                        <span>On the way</span>
                       </button>
                     )}
 
@@ -823,8 +1054,15 @@ export const OwnerOrdersTab: React.FC = () => {
                         className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>{isDelivery ? t('markDeliveredCompleted') : t('markPickedUpCompleted')}</span>
+                        <span>Complete Order</span>
                       </button>
+                    )}
+
+                    {isCompleted && (
+                      <div className="w-full py-2 px-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 font-black text-xs flex items-center justify-center gap-1.5 shadow-xs select-none">
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>JOB DONE</span>
+                      </div>
                     )}
 
                     {/* Print Receipt button */}
@@ -842,6 +1080,162 @@ export const OwnerOrdersTab: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 📄 ORDER DETAILS MODAL (แสดงรายละเอียดทั้งหมด พร้อมปุ่ม Print ใบ Order และ ปุ่ม ปิดหน้าต่าง) */}
+      {selectedOrderForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-white">
+            {/* Header */}
+            <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <span>{language === 'th' ? 'รายละเอียดใบออเดอร์' : 'Order Details'}</span>
+                    <span className="font-mono text-orange-400">{selectedOrderForDetail.orderNumberFormatted}</span>
+                  </h3>
+                  <span className="text-[11px] text-neutral-400">
+                    {new Date(selectedOrderForDetail.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrderForDetail(null)}
+                className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                title={language === 'th' ? 'ปิดหน้าต่าง' : 'Close'}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-4 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-xs">
+              {/* Customer Info Card */}
+              <div className="bg-neutral-950 p-3.5 rounded-2xl border border-neutral-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-neutral-500 block">
+                      {language === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
+                    </span>
+                    <span className="text-sm font-extrabold text-white">
+                      {selectedOrderForDetail.customer?.name || 'Customer'}
+                    </span>
+                  </div>
+                  {selectedOrderForDetail.customer?.phone && selectedOrderForDetail.customer.phone !== '-' && (
+                    <a
+                      href={`tel:${selectedOrderForDetail.customer.phone}`}
+                      className="px-2.5 py-1 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-orange-400 font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>{selectedOrderForDetail.customer.phone}</span>
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800/80 text-[11px]">
+                  <div>
+                    <span className="text-neutral-500 block">{language === 'th' ? 'วิธีรับ' : 'Order Type'}:</span>
+                    <span className="font-bold text-white capitalize">
+                      {selectedOrderForDetail.orderType === 'delivery' ? t('delivery') : t('pickup')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 block">{language === 'th' ? 'การชำระเงิน' : 'Payment'}:</span>
+                    <span className="font-bold text-white uppercase">
+                      {selectedOrderForDetail.paymentMethod} ({(selectedOrderForDetail.paymentStatus || 'pending')})
+                    </span>
+                  </div>
+                </div>
+
+                {selectedOrderForDetail.orderType === 'delivery' && selectedOrderForDetail.customer?.deliveryAddress && (
+                  <div className="pt-2 border-t border-neutral-800/80 text-[11px]">
+                    <span className="text-neutral-500 block flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-orange-400" />
+                      {language === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}:
+                    </span>
+                    <span className="text-neutral-200 block mt-0.5">{selectedOrderForDetail.customer.deliveryAddress}</span>
+                  </div>
+                )}
+
+                {selectedOrderForDetail.customer?.notes && (
+                  <div className="pt-2 border-t border-neutral-800/80 text-[11px] text-amber-300 italic">
+                    Note: "{selectedOrderForDetail.customer.notes}"
+                  </div>
+                )}
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-2">
+                <span className="text-[11px] uppercase font-bold text-neutral-400 tracking-wider block">
+                  {language === 'th' ? 'รายการอาหารที่สั่ง' : 'Ordered Food Items'} ({selectedOrderForDetail.items?.length || 0})
+                </span>
+                <div className="space-y-1.5">
+                  {selectedOrderForDetail.items?.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-neutral-950/80 rounded-xl border border-neutral-800 flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <div className="font-bold text-white text-xs sm:text-sm">
+                          <span className="text-orange-400 mr-2">{item.quantity}×</span>
+                          {item.name?.[language] || item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}
+                        </div>
+                        {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                          <div className="text-[11px] text-neutral-400 pl-4 mt-1 space-y-0.5">
+                            {item.selectedModifiers.map((m, mIdx) => (
+                              <div key={mIdx}>
+                                + {m.optionName?.[language] || m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '')}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {item.specialRequest && (
+                          <p className="text-[11px] text-amber-300 italic pl-4 mt-0.5">
+                            "{item.specialRequest}"
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold text-sm text-neutral-200">
+                        ฿{item.subtotal?.toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Summary */}
+              <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 flex items-center justify-between text-base">
+                <span className="font-bold text-neutral-400">{language === 'th' ? 'ยอดรวมทั้งหมด' : 'Grand Total'}:</span>
+                <span className="font-mono text-xl font-black text-orange-400">
+                  ฿{selectedOrderForDetail.total?.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Bottom Buttons: Print ใบ Order & ปิดหน้าต่าง */}
+            <div className="p-4 border-t border-neutral-800 bg-neutral-950/60 flex items-center gap-3">
+              <button
+                type="button"
+                id="modal-btn-print-order"
+                onClick={() => handlePrintReceipt(selectedOrderForDetail)}
+                className="flex-1 py-3 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-neutral-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4 stroke-[2.5]" />
+                <span>{language === 'th' ? 'Print ใบ Order' : 'Print Order Receipt'}</span>
+              </button>
+
+              <button
+                type="button"
+                id="modal-btn-close-order"
+                onClick={() => setSelectedOrderForDetail(null)}
+                className="py-3 px-5 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-200 hover:text-white font-bold text-xs sm:text-sm transition-all cursor-pointer"
+              >
+                {language === 'th' ? 'ปิดหน้าต่าง' : 'Close'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
