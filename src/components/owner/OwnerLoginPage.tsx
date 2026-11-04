@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { KeyRound, ShieldCheck, AlertCircle, ArrowLeft, Globe, Lock } from 'lucide-react';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo } from '../../utils/navigation';
+import { OwnerPOSInstallButton } from './OwnerPOSInstallButton';
 
 export const OwnerLoginPage: React.FC = () => {
   const {
@@ -69,34 +70,39 @@ export const OwnerLoginPage: React.FC = () => {
           <span>{language === 'th' ? 'กลับไปหน้าสั่งอาหารลูกค้า' : 'Back to Customer Menu'}</span>
         </button>
 
-        {/* Language Switcher */}
-        <div className="flex items-center bg-white/10 p-0.5 rounded-full text-xs font-semibold">
-          <button
-            type="button"
-            id="owner-lang-btn-en"
-            onClick={() => setLanguage('en')}
-            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${
-              language === 'en'
-                ? 'bg-[#E65100] text-white shadow-xs font-bold'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <span>🇬🇧</span>
-            <span>EN</span>
-          </button>
-          <button
-            type="button"
-            id="owner-lang-btn-th"
-            onClick={() => setLanguage('th')}
-            className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${
-              language === 'th'
-                ? 'bg-[#E65100] text-white shadow-xs font-bold'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <span>🇹🇭</span>
-            <span>ไทย</span>
-          </button>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* POS Install Button in Header */}
+          <OwnerPOSInstallButton variant="header" />
+
+          {/* Language Switcher */}
+          <div className="flex items-center bg-white/10 p-0.5 rounded-full text-xs font-semibold">
+            <button
+              type="button"
+              id="owner-lang-btn-en"
+              onClick={() => setLanguage('en')}
+              className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${
+                language === 'en'
+                  ? 'bg-[#E65100] text-white shadow-xs font-bold'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <span>🇬🇧</span>
+              <span>EN</span>
+            </button>
+            <button
+              type="button"
+              id="owner-lang-btn-th"
+              onClick={() => setLanguage('th')}
+              className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${
+                language === 'th'
+                  ? 'bg-[#E65100] text-white shadow-xs font-bold'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <span>🇹🇭</span>
+              <span>ไทย</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -215,9 +221,12 @@ export const OwnerLoginPage: React.FC = () => {
             </form>
           )}
 
+          {/* POS Install Button for easy access on POS screen */}
+          <OwnerPOSInstallButton variant="card" className="mt-4" />
+
           {/* Quick Default Passcode hint if default */}
           {settings.ownerPasscodeHash === '1234' && (
-            <p className="text-[11px] text-gray-500 mt-4">
+            <p className="text-[11px] text-gray-500 mt-3">
               Default passcode: <span className="font-mono text-gray-300 font-bold">1234</span>
             </p>
           )}

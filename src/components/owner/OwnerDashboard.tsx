@@ -20,6 +20,7 @@ import { OwnerOrdersTab } from './OwnerOrdersTab';
 import { NewOrderAlertModal } from './NewOrderAlertModal';
 import { OwnerSoundSettingsCard } from './OwnerSoundSettingsCard';
 import { POSPrinterModal } from './POSPrinterModal';
+import { OwnerPOSInstallButton } from './OwnerPOSInstallButton';
 import { orderNotificationService } from '../../services/orderNotificationService';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo, getLogoUrl } from '../../utils/navigation';
@@ -494,6 +495,23 @@ export const OwnerDashboard: React.FC = () => {
               {language === 'th' ? 'เสียงแจ้งเตือน' : 'Sound Alert'}
             </span>
           </button>
+
+          {/* Quick POS Printer Connection & Settings */}
+          <button
+            type="button"
+            id="owner-header-pos-printer-btn"
+            onClick={() => setIsPOSPrinterModalOpen(true)}
+            className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-cyan-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title={language === 'th' ? 'ตั้งค่าและเชื่อมต่อเครื่องพิมพ์ POS' : 'Connect & Test POS Printer'}
+          >
+            <Printer className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">
+              {language === 'th' ? 'เครื่องพิมพ์ POS' : 'POS Printer'}
+            </span>
+          </button>
+
+          {/* Install POS App Button */}
+          <OwnerPOSInstallButton variant="header" />
 
           <button
             type="button"
