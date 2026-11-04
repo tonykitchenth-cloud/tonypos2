@@ -242,7 +242,7 @@ export function loadCustomerProfile(): CustomerProfile {
  * Permanently saves customer profile to local storage across multiple fallback keys.
  * Defensively protects existing fields so empty values never overwrite valid saved data.
  */
-export function saveCustomerProfile(profile: CustomerProfile): void {
+export function saveCustomerProfile(profile: Partial<CustomerProfile>): void {
   if (typeof window === 'undefined') return;
 
   try {

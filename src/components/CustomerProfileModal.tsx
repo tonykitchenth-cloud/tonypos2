@@ -209,18 +209,6 @@ export const CustomerProfileModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  id="profile-method-pickup"
-                  onClick={() => setOrderType('pickup')}
-                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
-                    orderType === 'pickup'
-                      ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
-                      : 'bg-gray-50 border-gray-200 text-gray-600'
-                  }`}
-                >
-                  {t('pickup')}
-                </button>
-                <button
-                  type="button"
                   id="profile-method-delivery"
                   onClick={() => setOrderType('delivery')}
                   className={`py-2 px-3 rounded-xl border font-bold transition-all ${
@@ -230,6 +218,18 @@ export const CustomerProfileModal: React.FC = () => {
                   }`}
                 >
                   {t('delivery')}
+                </button>
+                <button
+                  type="button"
+                  id="profile-method-pickup"
+                  onClick={() => setOrderType('pickup')}
+                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
+                    orderType === 'pickup'
+                      ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
+                      : 'bg-gray-50 border-gray-200 text-gray-600'
+                  }`}
+                >
+                  {t('pickup')}
                 </button>
               </div>
             </div>

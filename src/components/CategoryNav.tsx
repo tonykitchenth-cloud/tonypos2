@@ -1,6 +1,5 @@
 import React, { useRef, useEffect } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { Utensils } from 'lucide-react';
 
 export const CategoryNav: React.FC = () => {
   const {
@@ -9,7 +8,6 @@ export const CategoryNav: React.FC = () => {
     activeCategoryId,
     setActiveCategoryId,
     language,
-    t,
   } = useRestaurant();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -19,11 +17,15 @@ export const CategoryNav: React.FC = () => {
     .filter(cat => cat.visible !== false)
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
+  // Ensure active category is valid and not 'all'
+  useEffect(() => {
+    if (visibleCategories.length > 0 && (!activeCategoryId || activeCategoryId === 'all' || !visibleCategories.some(c => c.id === activeCategoryId))) {
+      setActiveCategoryId(visibleCategories[0].id);
+    }
+  }, [activeCategoryId, visibleCategories, setActiveCategoryId]);
+
   // Count items per category (only non-hidden items)
   const getItemCount = (catId: string) => {
-    if (catId === 'all') {
-      return menuItems.filter(i => i.availability !== 'hidden').length;
-    }
     return menuItems.filter(i => i.categoryId === catId && i.availability !== 'hidden').length;
   };
 
@@ -34,29 +36,7 @@ export const CategoryNav: React.FC = () => {
           ref={scrollContainerRef}
           className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"
         >
-          {/* "All Dishes" Pill */}
-          <button
-            id="cat-tab-all"
-            type="button"
-            onClick={() => setActiveCategoryId('all')}
-            className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeCategoryId === 'all'
-                ? 'bg-[#1A1A1A] text-white shadow-xs'
-                : 'bg-white text-gray-700 border border-gray-200/80 hover:bg-gray-50'
-            }`}
-          >
-            <Utensils className="w-3.5 h-3.5 text-[#E65100]" />
-            <span>{t('allCategories')}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeCategoryId === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              {getItemCount('all')}
-            </span>
-          </button>
-
-          {/* Dynamic Categories */}
+          {/* Dynamic Categories (All Dishes removed per requirement) */}
           {visibleCategories.map((cat) => {
             const isSelected = activeCategoryId === cat.id;
             const catName = cat.name?.[language] || cat.name?.en || (typeof cat.name === 'string' ? cat.name : 'Category');

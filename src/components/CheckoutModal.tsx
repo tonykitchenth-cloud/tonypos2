@@ -5,6 +5,7 @@ import { formatCurrency } from '../utils/pricing';
 import { generateOrderMessage, buildWhatsAppUrl, buildLineUrl } from '../utils/orderMessageGenerator';
 import { CreateOrderParams } from '../utils/orderSync';
 import { saveCustomerOrder } from '../utils/orderHistory';
+import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
 import {
   X,
   User,
@@ -46,13 +47,79 @@ export const CheckoutModal: React.FC = () => {
     t,
   } = useRestaurant();
 
-  const [orderType, setOrderType] = useState<OrderType>(customerProfile.orderType || 'pickup');
-  const [name, setName] = useState<string>(customerProfile.name || '');
-  const [phone, setPhone] = useState<string>(customerProfile.phone || '');
-  const [address, setAddress] = useState<string>(customerProfile.deliveryAddress || '');
-  const [notes, setNotes] = useState<string>(customerProfile.notes || '');
+  const [orderType, setOrderType] = useState<OrderType>(() => {
+    const p = customerProfile?.orderType ? customerProfile : loadCustomerProfile();
+    return p.orderType || 'pickup';
+  });
+  const [name, setName] = useState<string>(() => {
+    const p = customerProfile?.name ? customerProfile : loadCustomerProfile();
+    return p.name || '';
+  });
+  const [phone, setPhone] = useState<string>(() => {
+    const p = customerProfile?.phone ? customerProfile : loadCustomerProfile();
+    return p.phone || '';
+  });
+  const [address, setAddress] = useState<string>(() => {
+    const p = customerProfile?.deliveryAddress ? customerProfile : loadCustomerProfile();
+    return p.deliveryAddress || '';
+  });
+  const [notes, setNotes] = useState<string>(() => {
+    const p = customerProfile?.notes ? customerProfile : loadCustomerProfile();
+    return p.notes || '';
+  });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Re-sync with customerProfile whenever CheckoutModal opens or customerProfile updates
+  React.useEffect(() => {
+    if (isCheckoutOpen) {
+      const current = (customerProfile?.name || customerProfile?.phone) ? customerProfile : loadCustomerProfile();
+      if (current.name) setName(current.name);
+      if (current.phone) setPhone(current.phone);
+      if (current.deliveryAddress) setAddress(current.deliveryAddress);
+      if (current.orderType) setOrderType(current.orderType);
+      if (current.notes) setNotes(current.notes);
+    }
+  }, [isCheckoutOpen, customerProfile]);
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    setErrorMsg(null);
+    if (val.trim()) {
+      saveCustomerProfile({ name: val.trim() });
+      updateCustomerProfile({ name: val.trim() });
+    }
+  };
+
+  const handlePhoneChange = (val: string) => {
+    setPhone(val);
+    setErrorMsg(null);
+    if (val.trim()) {
+      saveCustomerProfile({ phone: val.trim() });
+      updateCustomerProfile({ phone: val.trim() });
+    }
+  };
+
+  const handleAddressChange = (val: string) => {
+    setAddress(val);
+    setErrorMsg(null);
+    if (val.trim()) {
+      saveCustomerProfile({ deliveryAddress: val.trim() });
+      updateCustomerProfile({ deliveryAddress: val.trim() });
+    }
+  };
+
+  const handleNotesChange = (val: string) => {
+    setNotes(val);
+    saveCustomerProfile({ notes: val.trim() });
+    updateCustomerProfile({ notes: val.trim() });
+  };
+
+  const handleOrderTypeChange = (type: OrderType) => {
+    setOrderType(type);
+    saveCustomerProfile({ orderType: type });
+    updateCustomerProfile({ orderType: type });
+  };
 
   if (!isCheckoutOpen) return null;
 
@@ -91,6 +158,7 @@ export const CheckoutModal: React.FC = () => {
       orderType,
       notes: notes.trim(),
     };
+    saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);
 
     // 4. Create immutable item snapshots
@@ -155,6 +223,7 @@ export const CheckoutModal: React.FC = () => {
       orderType,
       notes: notes.trim(),
     };
+    saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);
 
     // 4. Generate structured order message
@@ -283,7 +352,7 @@ export const CheckoutModal: React.FC = () => {
               </div>
             )}
 
-            {/* Order Method Selector: Pickup vs Delivery */}
+            {/* Order Method Selector: Delivery (Left) vs Pickup (Right) */}
             <div>
               <label className="text-xs font-bold text-gray-700 block mb-1.5">
                 {t('orderType')}
@@ -291,33 +360,8 @@ export const CheckoutModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  id="checkout-pickup-btn"
-                  onClick={() => setOrderType('pickup')}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                    orderType === 'pickup'
-                      ? 'border-[#E65100] bg-orange-50/50 shadow-xs'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#1A1A1A]">
-                      {t('pickup')}
-                    </span>
-                    {orderType === 'pickup' && (
-                      <span className="w-4 h-4 rounded-full bg-[#E65100] text-white flex items-center justify-center">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">
-                    {t('pickupDesc')}
-                  </p>
-                </button>
-
-                <button
-                  type="button"
                   id="checkout-delivery-btn"
-                  onClick={() => setOrderType('delivery')}
+                  onClick={() => handleOrderTypeChange('delivery')}
                   className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
                     orderType === 'delivery'
                       ? 'border-[#E65100] bg-orange-50/50 shadow-xs'
@@ -338,41 +382,40 @@ export const CheckoutModal: React.FC = () => {
                     {t('deliveryDesc')}
                   </p>
                 </button>
-              </div>
-            </div>
 
-            {/* Payment Method Selector */}
-            <div>
-              <label className="text-xs font-bold text-gray-700 block mb-1.5">
-                {t('paymentMethod')}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  id="checkout-payment-cash-btn"
-                  onClick={() => setPaymentMethod('cash')}
+                  id="checkout-pickup-btn"
+                  onClick={() => handleOrderTypeChange('pickup')}
                   className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                    paymentMethod === 'cash'
+                    orderType === 'pickup'
                       ? 'border-[#E65100] bg-orange-50/50 shadow-xs'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#1A1A1A] flex items-center gap-1.5">
-                      <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-                      {t('cashShort')}
+                    <span className="text-xs font-bold text-[#1A1A1A]">
+                      {t('pickup')}
                     </span>
-                    {paymentMethod === 'cash' && (
+                    {orderType === 'pickup' && (
                       <span className="w-4 h-4 rounded-full bg-[#E65100] text-white flex items-center justify-center">
                         <Check className="w-2.5 h-2.5 stroke-[3]" />
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">
-                    {t('payWithCashDesc')}
+                    {t('pickupDesc')}
                   </p>
                 </button>
+              </div>
+            </div>
 
+            {/* Payment Method Selector: QR Payment (Left) vs Cash (Right) */}
+            <div>
+              <label className="text-xs font-bold text-gray-700 block mb-1.5">
+                {t('paymentMethod')}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   id="checkout-payment-qr-btn"
@@ -398,6 +441,32 @@ export const CheckoutModal: React.FC = () => {
                     {t('payWithQrDesc')}
                   </p>
                 </button>
+
+                <button
+                  type="button"
+                  id="checkout-payment-cash-btn"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    paymentMethod === 'cash'
+                      ? 'border-[#E65100] bg-orange-50/50 shadow-xs'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                      {t('cashShort')}
+                    </span>
+                    {paymentMethod === 'cash' && (
+                      <span className="w-4 h-4 rounded-full bg-[#E65100] text-white flex items-center justify-center">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">
+                    {t('payWithCashDesc')}
+                  </p>
+                </button>
               </div>
             </div>
 
@@ -416,10 +485,7 @@ export const CheckoutModal: React.FC = () => {
                   id="checkout-name-input"
                   type="text"
                   value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setErrorMsg(null);
-                  }}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   placeholder={t('fullNamePlaceholder')}
                   className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100]"
                 />
@@ -434,10 +500,7 @@ export const CheckoutModal: React.FC = () => {
                   id="checkout-phone-input"
                   type="tel"
                   value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setErrorMsg(null);
-                  }}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   placeholder={t('phoneNumberPlaceholder')}
                   className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100]"
                 />
@@ -457,10 +520,7 @@ export const CheckoutModal: React.FC = () => {
                     id="checkout-address-input"
                     rows={2}
                     value={address}
-                    onChange={(e) => {
-                      setAddress(e.target.value);
-                      setErrorMsg(null);
-                    }}
+                    onChange={(e) => handleAddressChange(e.target.value)}
                     placeholder={t('deliveryAddressPlaceholder')}
                     className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100] resize-none"
                   />
@@ -476,7 +536,7 @@ export const CheckoutModal: React.FC = () => {
                   id="checkout-notes-input"
                   type="text"
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e) => handleNotesChange(e.target.value)}
                   placeholder={t('orderNotesPlaceholder')}
                   className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100]"
                 />
