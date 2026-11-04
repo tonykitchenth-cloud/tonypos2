@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { RestaurantOrder } from '../../types';
 import { getOwnerOrderHistory } from '../../utils/orderHistory';
+import { posPrinterService } from '../../services/posPrinterService';
 import {
   X,
   Receipt,
@@ -66,7 +67,16 @@ export const OwnerOrderHistoryModal: React.FC<OwnerOrderHistoryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePrintReceipt = (order: RestaurantOrder) => {
+  const handlePrintReceipt = async (order: RestaurantOrder) => {
+    // 1. Direct POS print if connected
+    if (posPrinterService.isConnected()) {
+      const res = await posPrinterService.printOrder(order);
+      if (res.success) {
+        return;
+      }
+    }
+
+    // 2. Fallback to standard print
     setSelectedOrderForReceipt(order);
     setTimeout(() => {
       window.print();

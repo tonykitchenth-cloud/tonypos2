@@ -47,6 +47,8 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { OwnerOrderHistoryModal } from './OwnerOrderHistoryModal';
+import { POSPrinterModal } from './POSPrinterModal';
+import { posPrinterService } from '../../services/posPrinterService';
 
 export const OwnerOrdersTab: React.FC = () => {
   const {
@@ -74,6 +76,8 @@ export const OwnerOrdersTab: React.FC = () => {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
   const [isOwnerHistoryModalOpen, setIsOwnerHistoryModalOpen] = useState<boolean>(false);
+  const [isPOSPrinterModalOpen, setIsPOSPrinterModalOpen] = useState<boolean>(false);
+  const [printSuccessNotice, setPrintSuccessNotice] = useState<string | null>(null);
 
   // Rider link copy status
   const [copiedRiderLink, setCopiedRiderLink] = useState(false);
@@ -407,7 +411,22 @@ export const OwnerOrdersTab: React.FC = () => {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
   }, [allOrders]);
 
-  const handlePrintReceipt = (order: RestaurantOrder) => {
+  const handlePrintReceipt = async (order: RestaurantOrder) => {
+    // 1. If POS thermal printer is connected via Web Serial/USB, print directly without Windows dialog!
+    if (posPrinterService.isConnected()) {
+      const res = await posPrinterService.printOrder(order);
+      if (res.success) {
+        setPrintSuccessNotice(
+          language === 'th'
+            ? `พิมพ์ใบออเดอร์ ${order.orderNumberFormatted || '#' + order.orderNumber} ไปยังเครื่องพิมพ์ POS เรียบร้อยแล้ว!`
+            : `Order ${order.orderNumberFormatted || '#' + order.orderNumber} printed directly to POS printer!`
+        );
+        setTimeout(() => setPrintSuccessNotice(null), 3500);
+        return;
+      }
+    }
+
+    // 2. Fallback to standard print dialog
     setSelectedOrderForPrint(order);
     setTimeout(() => {
       window.print();
@@ -470,6 +489,14 @@ export const OwnerOrdersTab: React.FC = () => {
               <span>{t('muteAlarmBtn')}</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* POS Direct Print Success Toast Banner */}
+      {printSuccessNotice && (
+        <div className="p-3.5 bg-emerald-500 text-neutral-950 font-extrabold text-xs rounded-2xl flex items-center gap-2.5 shadow-lg border border-emerald-400 animate-fade-in">
+          <Printer className="w-4 h-4 stroke-[2.5]" />
+          <span>{printSuccessNotice}</span>
         </div>
       )}
 
@@ -552,6 +579,21 @@ export const OwnerOrdersTab: React.FC = () => {
             >
               <HardDrive className="w-4 h-4 text-orange-400" />
               <span>{language === 'th' ? 'ประวัติในเครื่อง (20+)' : 'Local Ledger (20+)'}</span>
+            </button>
+
+            {/* POS Thermal Printer Settings Button */}
+            <button
+              id="btn-pos-printer-settings"
+              type="button"
+              onClick={() => setIsPOSPrinterModalOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700 shrink-0"
+              title={language === 'th' ? 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ POS (ESC/POS)' : 'POS Printer Setup'}
+            >
+              <Printer className="w-4 h-4 text-orange-400" />
+              <span>{language === 'th' ? 'เครื่องพิมพ์ POS' : 'POS Printer'}</span>
+              {posPrinterService.isConnected() && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
             </button>
           </div>
         </div>
@@ -1606,6 +1648,12 @@ export const OwnerOrdersTab: React.FC = () => {
       <OwnerOrderHistoryModal
         isOpen={isOwnerHistoryModalOpen}
         onClose={() => setIsOwnerHistoryModalOpen(false)}
+      />
+
+      {/* 🖨️ POS Thermal Receipt Printer Modal */}
+      <POSPrinterModal
+        isOpen={isPOSPrinterModalOpen}
+        onClose={() => setIsPOSPrinterModalOpen(false)}
       />
     </div>
   );

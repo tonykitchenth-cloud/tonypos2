@@ -29,3 +29,33 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* POS Thermal Receipt Print Media Styling (80mm Continuous Roll) */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
+  }
+  html, body {
+    width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  #root > *:not(#printable-kitchen-receipt) {
+    display: none !important;
+  }
+  #printable-kitchen-receipt {
+    display: block !important;
+    position: static !important;
+    width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 3mm !important;
+    font-family: 'Courier New', Courier, monospace, 'Sarabun', sans-serif !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

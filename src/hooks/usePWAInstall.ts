@@ -11,6 +11,7 @@ export interface PWAInstallState {
   isAndroid: boolean;
   isSafari: boolean;
   isChrome: boolean;
+  isDesktopPOS: boolean;
   isLineBrowser: boolean;
   isInAppBrowser: boolean;
   supportsNativePrompt: boolean;
@@ -18,17 +19,28 @@ export interface PWAInstallState {
 }
 
 export function usePWAInstall(): PWAInstallState {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => {
+    if (typeof window !== 'undefined') {
+      return (window as unknown as { __pwa_deferred_prompt?: BeforeInstallPromptEvent }).__pwa_deferred_prompt || null;
+    }
+    return null;
+  });
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
   const [isAndroid, setIsAndroid] = useState<boolean>(false);
   const [isSafari, setIsSafari] = useState<boolean>(false);
   const [isChrome, setIsChrome] = useState<boolean>(false);
+  const [isDesktopPOS, setIsDesktopPOS] = useState<boolean>(false);
   const [isLineBrowser, setIsLineBrowser] = useState<boolean>(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Check if early prompt was already captured by index.html script
+    if (!deferredPrompt && (window as unknown as { __pwa_deferred_prompt?: BeforeInstallPromptEvent }).__pwa_deferred_prompt) {
+      setDeferredPrompt((window as unknown as { __pwa_deferred_prompt: BeforeInstallPromptEvent }).__pwa_deferred_prompt);
+    }
 
     // 1. Check Standalone / Installed Display Mode strictly via system matchMedia and navigator
     const checkStandalone = (): boolean => {
@@ -92,23 +104,39 @@ export function usePWAInstall(): PWAInstallState {
       !/edg|opr|line|fban|fbav/i.test(ua);
     setIsChrome(isGoogleChrome);
 
-    // 3. Native beforeinstallprompt listener (Android Chrome / Chromium)
+    // Desktop / POS Machine Detection (Windows, Mac, Linux, ChromeOS not mobile phone)
+    const isDesktopOrPOS =
+      !isAppleMobile &&
+      !isAndroidDevice &&
+      (/windows|macintosh|linux|cros/.test(ua) || window.innerWidth >= 768);
+    setIsDesktopPOS(isDesktopOrPOS);
+
+    // 3. Native beforeinstallprompt listener (Chromium on POS / Android / Desktop)
     const handleBeforeInstallPrompt = (e: Event) => {
       // Prevent default mini-infobar so our custom INSTALL APP button controls the flow
       e.preventDefault();
+      (window as unknown as { __pwa_deferred_prompt?: BeforeInstallPromptEvent }).__pwa_deferred_prompt = e as BeforeInstallPromptEvent;
       setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    const handlePromptCaptured = () => {
+      const p = (window as unknown as { __pwa_deferred_prompt?: BeforeInstallPromptEvent }).__pwa_deferred_prompt;
+      if (p) setDeferredPrompt(p);
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      (window as unknown as { __pwa_deferred_prompt?: null }).__pwa_deferred_prompt = null;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('pwa_prompt_captured', handlePromptCaptured);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('pwa_prompt_captured', handlePromptCaptured);
       window.removeEventListener('appinstalled', handleAppInstalled);
       if (mediaQuery.removeEventListener) {
         mediaQuery.removeEventListener('change', handleDisplayChange);
@@ -145,6 +173,7 @@ export function usePWAInstall(): PWAInstallState {
     isAndroid,
     isSafari,
     isChrome,
+    isDesktopPOS,
     isLineBrowser,
     isInAppBrowser,
     supportsNativePrompt: Boolean(deferredPrompt),

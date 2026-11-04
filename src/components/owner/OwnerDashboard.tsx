@@ -19,6 +19,7 @@ import { HolidayCalendarModal } from './HolidayCalendarModal';
 import { OwnerOrdersTab } from './OwnerOrdersTab';
 import { NewOrderAlertModal } from './NewOrderAlertModal';
 import { OwnerSoundSettingsCard } from './OwnerSoundSettingsCard';
+import { POSPrinterModal } from './POSPrinterModal';
 import { orderNotificationService } from '../../services/orderNotificationService';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo, getLogoUrl } from '../../utils/navigation';
@@ -56,6 +57,7 @@ import {
   Volume2,
   Loader2,
   Bike,
+  Printer,
 } from 'lucide-react';
 
 type OwnerTab =
@@ -99,6 +101,7 @@ export const OwnerDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<OwnerTab>('orders');
   const [settingsSubTab, setSettingsSubTab] = useState<'brand' | 'notifications'>('brand');
+  const [isPOSPrinterModalOpen, setIsPOSPrinterModalOpen] = useState(false);
 
   // New Orders Alert Queue for visual banner/modal
   const [newOrdersAlertQueue, setNewOrdersAlertQueue] = useState<RestaurantOrder[]>([]);
@@ -1441,14 +1444,23 @@ export const OwnerDashboard: React.FC = () => {
                     type="button"
                     id="settings-subtab-notifications"
                     onClick={() => setSettingsSubTab('notifications')}
-                    className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       settingsSubTab === 'notifications'
                         ? 'bg-[#E65100] text-white shadow-xs'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     <Bell className="w-4 h-4" />
-                    <span>{language === 'th' ? 'เสียงแจ้งเตือนออเดอร์' : 'Notifications'}</span>
+                    <span>{language === 'th' ? 'เสียงแจ้งเตือน' : 'Notifications'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="settings-subtab-printer"
+                    onClick={() => setIsPOSPrinterModalOpen(true)}
+                    className="flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer text-gray-700 hover:bg-orange-50 hover:text-[#E65100] border border-dashed border-gray-300 hover:border-orange-300"
+                  >
+                    <Printer className="w-4 h-4 text-[#E65100]" />
+                    <span>{language === 'th' ? 'เครื่องพิมพ์ POS' : 'POS Printer'}</span>
                   </button>
                 </div>
 
@@ -2561,6 +2573,12 @@ export const OwnerDashboard: React.FC = () => {
         onViewOrder={handleViewOrderFromAlert}
         onDismissOrder={handleDismissAlertOrder}
         onDismissAll={handleDismissAllAlerts}
+      />
+
+      {/* ---------------- POS THERMAL PRINTER MODAL ---------------- */}
+      <POSPrinterModal
+        isOpen={isPOSPrinterModalOpen}
+        onClose={() => setIsPOSPrinterModalOpen(false)}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { IOSInstallGuideModal } from './IOSInstallGuideModal';
 import { AndroidInstallGuideModal } from './AndroidInstallGuideModal';
+import { DesktopPOSInstallGuideModal } from './DesktopPOSInstallGuideModal';
 import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
@@ -26,6 +27,7 @@ export const CustomerProfileModal: React.FC = () => {
     isInstalled,
     isIOS,
     isAndroid,
+    isDesktopPOS,
     isLineBrowser,
     supportsNativePrompt,
     installNativePrompt,
@@ -33,6 +35,7 @@ export const CustomerProfileModal: React.FC = () => {
 
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showAndroidGuide, setShowAndroidGuide] = useState(false);
+  const [showDesktopGuide, setShowDesktopGuide] = useState(false);
   const [showLineGuide, setShowLineGuide] = useState(false);
 
   const [name, setName] = useState<string>(customerProfile.name || '');
@@ -86,8 +89,16 @@ export const CustomerProfileModal: React.FC = () => {
     if (supportsNativePrompt) {
       const outcome = await installNativePrompt();
       if (outcome === 'unavailable') {
-        setShowAndroidGuide(true);
+        if (isDesktopPOS) {
+          setShowDesktopGuide(true);
+        } else {
+          setShowAndroidGuide(true);
+        }
       }
+      return;
+    }
+    if (isDesktopPOS) {
+      setShowDesktopGuide(true);
       return;
     }
     setShowAndroidGuide(true);
@@ -282,6 +293,10 @@ export const CustomerProfileModal: React.FC = () => {
           <AndroidInstallGuideModal
             isOpen={showAndroidGuide}
             onClose={() => setShowAndroidGuide(false)}
+          />
+          <DesktopPOSInstallGuideModal
+            isOpen={showDesktopGuide}
+            onClose={() => setShowDesktopGuide(false)}
           />
           <LineBrowserGuideModal
             isOpen={showLineGuide}

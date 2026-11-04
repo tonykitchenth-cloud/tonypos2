@@ -50,6 +50,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
+      // Early capture of Chromium PWA install prompt before React hydration
+      window.__pwa_deferred_prompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__pwa_deferred_prompt = e;
+        window.dispatchEvent(new CustomEvent('pwa_prompt_captured'));
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__pwa_deferred_prompt = null;
+        window.dispatchEvent(new CustomEvent('pwa_app_installed'));
+      });
+
       // Register PWA Service Worker relative to current base path
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
@@ -59,8 +71,8 @@
         });
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-CWMLlfwC.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-8RgjTug2.css">
+    <script type="module" crossorigin src="./assets/index-D0JFRYya.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dvb_sL_O.css">
   </head>
   <body class="bg-[#F8F9FA] text-[#1A1A1A] antialiased selection:bg-[#E65100]/20 selection:text-[#E65100]">
     <div id="root"></div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { IOSInstallGuideModal } from './IOSInstallGuideModal';
 import { AndroidInstallGuideModal } from './AndroidInstallGuideModal';
+import { DesktopPOSInstallGuideModal } from './DesktopPOSInstallGuideModal';
 import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 import { Download } from 'lucide-react';
 
@@ -9,6 +10,7 @@ export const PWAInstallBanner: React.FC = () => {
   const {
     isInstalled,
     isIOS,
+    isDesktopPOS,
     isLineBrowser,
     isInAppBrowser,
     supportsNativePrompt,
@@ -17,6 +19,7 @@ export const PWAInstallBanner: React.FC = () => {
 
   const [showIOSModal, setShowIOSModal] = useState<boolean>(false);
   const [showAndroidModal, setShowAndroidModal] = useState<boolean>(false);
+  const [showDesktopModal, setShowDesktopModal] = useState<boolean>(false);
   const [showInAppModal, setShowInAppModal] = useState<boolean>(false);
 
   // 1. Hide completely if app is already running in standalone / installed mode
@@ -37,16 +40,26 @@ export const PWAInstallBanner: React.FC = () => {
       return;
     }
 
-    // 3. Android Chrome / Chromium with native prompt available
+    // 3. Android Chrome / Chromium / Desktop POS with native prompt available
     if (supportsNativePrompt) {
       const outcome = await installNativePrompt();
       if (outcome === 'unavailable') {
-        setShowAndroidModal(true);
+        if (isDesktopPOS) {
+          setShowDesktopModal(true);
+        } else {
+          setShowAndroidModal(true);
+        }
       }
       return;
     }
 
-    // 4. Android Chrome / Chromium fallback when prompt not ready or desktop
+    // 4. Desktop POS / PC Chrome fallback
+    if (isDesktopPOS) {
+      setShowDesktopModal(true);
+      return;
+    }
+
+    // 5. Android Chrome fallback
     setShowAndroidModal(true);
   };
 
@@ -78,7 +91,13 @@ export const PWAInstallBanner: React.FC = () => {
         onClose={() => setShowAndroidModal(false)}
       />
 
-      {/* 3. In-App Browser (LINE / Facebook) Guidance Modal */}
+      {/* 3. Desktop / POS Machine Google Chrome Guide Modal */}
+      <DesktopPOSInstallGuideModal
+        isOpen={showDesktopModal}
+        onClose={() => setShowDesktopModal(false)}
+      />
+
+      {/* 4. In-App Browser (LINE / Facebook) Guidance Modal */}
       <LineBrowserGuideModal
         isOpen={showInAppModal}
         onClose={() => setShowInAppModal(false)}
