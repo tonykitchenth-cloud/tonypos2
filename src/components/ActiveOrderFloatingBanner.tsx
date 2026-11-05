@@ -11,7 +11,7 @@ interface ActiveOrderFloatingBannerProps {
 export const ActiveOrderFloatingBanner: React.FC<ActiveOrderFloatingBannerProps> = ({
   onOpenStatus,
 }) => {
-  const { activeOrderId, t, language } = useRestaurant();
+  const { activeOrderId, setActiveOrderId, t, language } = useRestaurant();
   const [order, setOrder] = useState<RestaurantOrder | null>(null);
 
   useEffect(() => {
@@ -21,15 +21,20 @@ export const ActiveOrderFloatingBanner: React.FC<ActiveOrderFloatingBannerProps>
     }
 
     const unsubscribe = subscribeToOrder(activeOrderId, (liveOrder) => {
+      if (liveOrder?.status === 'completed') {
+        setActiveOrderId(null);
+        setOrder(null);
+        return;
+      }
       setOrder(liveOrder);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [activeOrderId]);
+  }, [activeOrderId, setActiveOrderId]);
 
-  if (!order || order.status === 'cancelled') {
+  if (!order || order.status === 'cancelled' || order.status === 'completed') {
     return null;
   }
 

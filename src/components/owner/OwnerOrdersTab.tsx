@@ -339,14 +339,7 @@ export const OwnerOrdersTab: React.FC = () => {
         if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') {
           return false;
         }
-        // Keep active on_the_way orders, plus recently completed orders (within last 3 minutes)
-        // so the restaurant owner watches the "Complete Order" button automatically switch to "JOB DONE" in real time!
-        const isRecentlyCompleted =
-          order.status === 'completed' &&
-          order.completedAt &&
-          Date.now() - new Date(order.completedAt).getTime() < 180000;
-
-        if (order.status !== 'on_the_way' && !isRecentlyCompleted) {
+        if (order.status !== 'on_the_way') {
           return false;
         }
       } else if (statusFilter === 'completed') {

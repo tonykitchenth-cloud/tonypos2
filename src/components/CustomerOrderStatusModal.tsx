@@ -71,6 +71,11 @@ export const CustomerOrderStatusModal: React.FC<CustomerOrderStatusModalProps> =
       orderId,
       (liveOrder) => {
         if (notFoundTimerRef.current) clearTimeout(notFoundTimerRef.current);
+        if (liveOrder?.status === 'completed') {
+          setActiveOrderId(null);
+          onClose();
+          return;
+        }
         setOrder(liveOrder);
         setLoading(false);
         setIsDefinitiveNotFound(false);

@@ -235,25 +235,14 @@ export const CustomerOrderHistoryModal: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Live Status Button if active */}
-                        {isActiveOrder && (
-                          <button
-                            type="button"
-                            onClick={() => handleTrackActiveOrder(order.id)}
-                            className="px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                          >
-                            <Clock className="w-3.5 h-3.5 animate-spin" />
-                            <span>{language === 'th' ? 'ติดตามสถานะสด' : 'Live Status'}</span>
-                          </button>
-                        )}
-
                         {/* View Receipt / Details button */}
                         <button
                           type="button"
+                          id={`view-order-receipt-${order.id}`}
                           onClick={() => setSelectedOrderForReceipt(order)}
-                          className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          className="px-3.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <FileText className="w-3.5 h-3.5" />
+                          <FileText className="w-3.5 h-3.5 text-gray-600" />
                           <span>{language === 'th' ? 'ดูใบเสร็จหลักฐาน' : 'View Receipt'}</span>
                         </button>
                       </div>

@@ -363,16 +363,24 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const prevStatus = previousCustomerOrderStatusRef.current;
         previousCustomerOrderStatusRef.current = liveOrder.status;
 
+        // When order is marked completed (e.g. by Rider pressing 'ส่งเรียบร้อยแล้ว'),
+        // immediately close the customer's active order window and clear activeOrderId automatically
+        if (liveOrder.status === 'completed') {
+          setIsOrderStatusOpen(false);
+          setActiveOrderId(null);
+          refreshCustomerOrderHistory();
+          return;
+        }
+
         if (isInitialLoad) {
           isInitialLoad = false;
           // When first loading the page, if order was already completed in the past, do not play audio
           return;
         }
 
-        // Live transition check: only pop up and play sound if status changed to completed or on_the_way
+        // Live transition check: only pop up and play sound if status changed to on_the_way
         if (
-          (liveOrder.status === 'completed' || liveOrder.status === 'on_the_way') &&
-          prevStatus !== 'completed' &&
+          liveOrder.status === 'on_the_way' &&
           prevStatus !== 'on_the_way'
         ) {
           setIsOrderStatusOpen(true);
