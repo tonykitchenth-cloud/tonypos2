@@ -1,7 +1,8 @@
 // Tony's Kitchen PWA Service Worker
-const CACHE_NAME = 'tonys-kitchen-v2';
+const CACHE_NAME = 'tonys-kitchen-v3';
 const PRECACHE_ASSETS = [
   './',
+  './index.html',
   './manifest.json',
   './manifest.webmanifest',
   './icon-192.png',
@@ -54,7 +55,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request).catch(async () => {
         const cache = await caches.open(CACHE_NAME);
-        const cachedResponse = await cache.match('./') || await cache.match('/');
+        const cachedResponse = await cache.match('./index.html') || await cache.match('./') || await cache.match('/');
         return cachedResponse || Response.error();
       })
     );
