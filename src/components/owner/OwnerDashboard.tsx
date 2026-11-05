@@ -2584,14 +2584,7 @@ export const OwnerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ---------------- NEW ORDER NOTIFICATION ALERT MODAL ---------------- */}
-      <NewOrderAlertModal
-        orders={newOrdersAlertQueue}
-        language={language}
-        onViewOrder={handleViewOrderFromAlert}
-        onDismissOrder={handleDismissAlertOrder}
-        onDismissAll={handleDismissAllAlerts}
-      />
+      {/* Alerts are now displayed directly on the order cards in the Orders Tab */}
 
       {/* ---------------- POS THERMAL PRINTER MODAL ---------------- */}
       <POSPrinterModal

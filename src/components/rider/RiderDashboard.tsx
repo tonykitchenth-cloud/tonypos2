@@ -281,20 +281,37 @@ export const RiderDashboard: React.FC = () => {
                           </div>
                         )}
 
-                        {/* 1-Tap Google Maps Button */}
-                        {order.customer?.deliveryAddress && (
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                              order.customer.deliveryAddress
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
-                          >
-                            <Navigation className="w-4 h-4 text-blue-400" />
-                            <span>{language === 'th' ? 'เปิดแผนที่นำทาง (Google Maps)' : 'Open GPS Navigation'}</span>
-                            <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                          </a>
+                        {/* 1-Tap Google Maps Button with GPS Coordinates Support */}
+                        {(order.customer?.deliveryAddress || order.customer?.mapsUrl || order.customer?.latitude) && (
+                          <div className="space-y-1.5">
+                            {order.customer?.latitude && (
+                              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                                <span>{language === 'th' ? '📍 ปักหมุดพิกัด GPS แม่นยำจากลูกค้า' : '📍 Exact GPS Pin Pinned by Customer'}</span>
+                              </div>
+                            )}
+                            <a
+                              href={
+                                order.customer.mapsUrl ||
+                                (order.customer.latitude && order.customer.longitude
+                                  ? `https://www.google.com/maps?q=${order.customer.latitude},${order.customer.longitude}`
+                                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                      order.customer.deliveryAddress || ''
+                                    )}`)
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                            >
+                              <Navigation className="w-4 h-4 text-blue-400" />
+                              <span>
+                                {order.customer?.latitude
+                                  ? (language === 'th' ? 'นำทางไปยังหมุด GPS ของลูกค้า' : 'Navigate to Exact GPS Pin')
+                                  : (language === 'th' ? 'เปิดแผนที่นำทาง (Google Maps)' : 'Open GPS Navigation')}
+                              </span>
+                              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                            </a>
+                          </div>
                         )}
                       </div>
 

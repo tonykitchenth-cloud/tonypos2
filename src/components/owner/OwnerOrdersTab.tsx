@@ -45,6 +45,7 @@ import {
   Copy,
   ExternalLink,
   HardDrive,
+  Navigation,
 } from 'lucide-react';
 import { OwnerOrderHistoryModal } from './OwnerOrderHistoryModal';
 import { POSPrinterModal } from './POSPrinterModal';
@@ -202,8 +203,27 @@ export const OwnerOrdersTab: React.FC = () => {
     try {
       setIsUpdatingStatus(orderId);
       await updateOrderStatus(orderId, newStatus, reason ? { cancelReason: reason } : undefined);
-      // NOTE: Do not call muteAlarm() here. If other pending orders remain, the alarm continues!
-      // If no pending orders remain, RestaurantContext's snapshot listener automatically stops the alarm.
+
+      // Auto-print order immediately when store clicks Accept Order if POS printer is connected!
+      if (newStatus === 'accepted') {
+        const targetOrder = allOrders.find((o) => o.id === orderId);
+        if (targetOrder && posPrinterService.isConnected()) {
+          try {
+            const printRes = await posPrinterService.printOrder(targetOrder);
+            if (printRes.success) {
+              setPrintSuccessNotice(
+                language === 'th'
+                  ? `รับออเดอร์และพิมพ์ใบออเดอร์ ${targetOrder.orderNumberFormatted || '#' + targetOrder.orderNumber} ไปยังเครื่องพิมพ์ POS เรียบร้อยแล้ว!`
+                  : `Order ${targetOrder.orderNumberFormatted || '#' + targetOrder.orderNumber} accepted & printed directly to POS printer!`
+              );
+              setTimeout(() => setPrintSuccessNotice(null), 3500);
+            }
+          } catch (printErr) {
+            console.warn('POS auto-print notice:', printErr);
+          }
+        }
+      }
+
       if (cancellingOrderId === orderId) {
         setCancellingOrderId(null);
         setCancelReason('');
@@ -382,7 +402,19 @@ export const OwnerOrdersTab: React.FC = () => {
       return true;
     });
 
-    // เรียงลำดับ มาก่อน อยู่บน มาใหม่อยู่ล่าง (Oldest on top, newly arrived orders at bottom)
+    // สำหรับหมวด "เสร็จสิ้น" (completed): เรียงลำดับจากเลขมากไปน้อย หรือออเดอร์ที่เสร็จล่าสุดอยู่บนสุด
+    if (statusFilter === 'completed') {
+      return result.sort((a, b) => {
+        const timeA = new Date(a.completedAt || a.createdAt).getTime();
+        const timeB = new Date(b.completedAt || b.createdAt).getTime();
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+          return timeB - timeA;
+        }
+        return (b.orderNumber || 0) - (a.orderNumber || 0);
+      });
+    }
+
+    // หมวดอื่นๆ: เรียงลำดับ มาก่อน อยู่บน มาใหม่อยู่ล่าง (Oldest on top, newly arrived orders at bottom)
     return result.sort((a, b) => {
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
@@ -428,62 +460,7 @@ export const OwnerOrdersTab: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in" id="owner-orders-tab">
-      {/* ⚠️ HIGH-VISIBILITY NEW ORDER ALERT BANNER (Active when alarm rings or pending orders exist) */}
-      {(isAlarmActive || pendingOrdersCount > 0) && (
-        <div
-          id="active-alarm-banner"
-          className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-600 via-orange-600 to-red-600 text-white shadow-2xl shadow-red-500/30 border-2 border-yellow-300/60 flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse"
-        >
-          <div className="flex items-center gap-3.5 w-full md:w-auto">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/40 flex items-center justify-center text-white shrink-0 shadow-lg">
-              <Bell className="w-7 h-7 animate-bounce" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md bg-white text-red-700 text-xs font-black uppercase tracking-wider">
-                  🔔 {t('newOrderAlertTitle')}
-                </span>
-                {latestPendingOrder && (
-                  <span className="px-2 py-0.5 rounded-md bg-black/40 text-yellow-300 font-mono text-xs font-black">
-                    {latestPendingOrder.orderNumberFormatted}
-                  </span>
-                )}
-              </div>
-              <h4 className="text-sm sm:text-base font-extrabold mt-0.5">
-                {latestPendingOrder
-                  ? `${latestPendingOrder.customer?.name || 'Customer'} (${(latestPendingOrder.orderType || '').toUpperCase()}) • ฿${(latestPendingOrder.total || 0).toLocaleString()}`
-                  : `${pendingOrdersCount} ${t('pendingInAppOrdersAlert')}`}
-              </h4>
-              <p className="text-xs text-white/90">
-                {pendingOrdersCount} {t('pendingInAppOrdersAlert')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0">
-            {latestPendingOrder && (
-              <button
-                id="btn-accept-order-top-banner"
-                type="button"
-                onClick={() => handleStatusChange(latestPendingOrder.id, 'accepted')}
-                className="flex-1 md:flex-initial py-2.5 px-5 rounded-xl bg-white hover:bg-neutral-100 text-emerald-700 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                <span>{t('acceptOrderBtn')} ({latestPendingOrder.orderNumberFormatted})</span>
-              </button>
-            )}
-
-            <button
-              id="btn-mute-alarm-banner"
-              onClick={muteAlarm}
-              className="py-2.5 px-4 rounded-xl bg-black/40 hover:bg-black/60 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer"
-            >
-              <VolumeX className="w-4 h-4 stroke-[2.5]" />
-              <span>{t('muteAlarmBtn')}</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Top alert banner removed per user request: alerts are now placed directly on the incoming order cards */}
 
       {/* POS Direct Print Success Toast Banner */}
       {printSuccessNotice && (
@@ -966,6 +943,7 @@ export const OwnerOrdersTab: React.FC = () => {
             const isAccepted = order.status === 'accepted';
             const isOnTheWay = order.status === 'on_the_way';
             const isCompleted = order.status === 'completed';
+            const isCancelled = order.status === 'cancelled';
             const isDelivery = order.orderType === 'delivery';
 
             const formattedTime = new Date(order.createdAt).toLocaleTimeString([], {
@@ -979,9 +957,9 @@ export const OwnerOrdersTab: React.FC = () => {
                 key={order.id}
                 id={`order-card-${order.id}`}
                 onClick={() => setSelectedOrderForDetail(order)}
-                className={`bg-neutral-900 border rounded-2xl p-4 sm:p-5 shadow-lg transition-all cursor-pointer hover:border-orange-500/50 group flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                className={`bg-neutral-900 border rounded-2xl p-4 sm:p-5 shadow-lg transition-all cursor-pointer hover:border-orange-500/50 group flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                   isPending
-                    ? 'border-amber-500/60 ring-2 ring-amber-500/20 shadow-amber-500/10'
+                    ? 'border-2 border-red-500 ring-2 ring-red-500/30 shadow-xl shadow-red-500/20 animate-pulse'
                     : isOnTheWay
                     ? 'border-orange-500/50'
                     : isAccepted
@@ -991,151 +969,59 @@ export const OwnerOrdersTab: React.FC = () => {
                     : 'border-neutral-800/80 opacity-70'
                 }`}
               >
-                {/* 1. Left Compartment: Order Number, Channel Badge, Status, Order Type, Time */}
-                <div className="flex flex-row lg:flex-col items-center lg:items-start justify-between lg:justify-center gap-2 lg:w-52 shrink-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-base sm:text-xl font-black text-white group-hover:text-orange-400 transition-colors">
-                      {order.orderNumberFormatted}
+                {/* 1. Left/Center: Order Number, Alert Badge (if pending), and Customer Name */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1 min-w-0">
+                  {/* Order Number & Alert Notification Badge on Card */}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span className="font-mono text-xl sm:text-2xl font-black text-white group-hover:text-orange-400 transition-colors">
+                      {order.orderNumberFormatted || `#${order.orderNumber}`}
                     </span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        order.source === 'in_app'
-                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                          : order.source === 'whatsapp'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      }`}
-                    >
-                      {order.source.replace('_', '-')}
-                    </span>
+                    {isPending && (
+                      <span className="px-2.5 py-1 rounded-full bg-red-600 text-white text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-red-600/30 animate-bounce shrink-0">
+                        <Bell className="w-3.5 h-3.5 fill-current" />
+                        <span>{language === 'th' ? 'ออเดอร์ใหม่!' : 'NEW ORDER!'}</span>
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-lg text-xs font-bold shrink-0 ${
-                        isPending
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
-                          : isOnTheWay
-                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                          : isAccepted
-                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                          : isCompleted
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      }`}
-                    >
-                      {isOnTheWay
-                        ? 'On the way'
-                        : isAccepted
-                        ? t('statusStepAccepted')
-                        : isPending
-                        ? t('statusStepConfirmed')
-                        : isCompleted
-                        ? t('statusStepCompleted')
-                        : t('statusStepCancelled')}
+                  {/* Customer Name */}
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] uppercase font-bold text-neutral-500 block">
+                      {language === 'th' ? 'ชื่อลูกค้า' : 'Customer'}
                     </span>
-
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-neutral-300 bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800">
-                      {isDelivery ? (
-                        <Bike className="w-3 h-3 text-orange-400" />
-                      ) : (
-                        <Store className="w-3 h-3 text-emerald-400" />
-                      )}
-                      <span>{isDelivery ? t('delivery') : t('pickup')}</span>
-                    </span>
-                  </div>
-
-                  <span className="text-[11px] text-neutral-400 font-mono">
-                    {formattedTime} • {formattedDate}
-                  </span>
-                </div>
-
-                {/* 2. Middle Compartment: Customer Name, Phone, Payment & Tap Prompt */}
-                <div className="flex-1 min-w-0 space-y-2 lg:px-4 lg:border-x lg:border-neutral-800/80">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-500 block">
-                        {language === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
-                      </span>
-                      <span className="font-extrabold text-white text-base sm:text-lg">
-                        {order.customer?.name || 'Customer'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {order.customer?.phone && order.customer.phone !== '-' ? (
-                        <a
-                          href={`tel:${order.customer.phone}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-orange-400 text-xs font-semibold flex items-center gap-1 transition-colors"
-                        >
-                          <Phone className="w-3 h-3" />
-                          <span>{order.customer.phone}</span>
-                        </a>
-                      ) : null}
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTogglePayment(order);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg bg-neutral-950/80 border border-neutral-800 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-                          order.paymentStatus === 'paid'
-                            ? 'text-emerald-400'
-                            : 'text-amber-400 hover:underline'
-                        }`}
-                      >
-                        {order.paymentMethod === 'qr_payment' ? (
-                          <CreditCard className="w-3.5 h-3.5" />
-                        ) : (
-                          <Banknote className="w-3.5 h-3.5" />
-                        )}
-                        <span>
-                          {order.paymentMethod === 'qr_payment' ? t('qrPayment') : t('cash')} (
-                          {(order.paymentStatus || 'pending').toUpperCase()})
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tap Card for Full Details Prompt */}
-                  <div className="p-2.5 rounded-xl bg-neutral-950/50 border border-neutral-800/80 group-hover:border-orange-500/40 transition-colors flex items-center justify-between text-xs text-neutral-400">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-orange-400 group-hover:scale-110 transition-transform" />
-                      <span className="font-semibold text-neutral-200">
-                        {language === 'th' ? 'กดที่การ์ดเพื่อดูรายละเอียดอาหารทั้งหมด' : 'Tap to view full order details'}
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-bold text-orange-400">
-                      {order.items?.length || 0} {language === 'th' ? 'รายการ' : 'items'} &gt;
+                    <span className="font-extrabold text-white text-base sm:text-lg truncate block">
+                      {order.customer?.name || (language === 'th' ? 'ลูกค้า' : 'Customer')}
                     </span>
                   </div>
                 </div>
 
-                {/* 3. Right Compartment: Total & Action Buttons */}
+                {/* 2. Right: Total & Action Buttons */}
                 <div
-                  className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between gap-3 lg:w-56 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-neutral-800"
+                  className="flex items-center justify-between md:justify-end gap-4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-neutral-800"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-baseline lg:flex-col lg:items-end justify-between sm:justify-start gap-1">
-                    <span className="text-xs font-bold text-neutral-400">{t('total')}:</span>
+                  {/* Food Total */}
+                  <div className="text-left md:text-right">
+                    <span className="text-[10px] uppercase font-bold text-neutral-400 block">
+                      {t('total')}
+                    </span>
                     <span className="font-mono text-lg sm:text-2xl font-black text-orange-400">
                       ฿{order.total.toLocaleString()}
                     </span>
                   </div>
 
-                  <div className="w-full space-y-1.5">
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 shrink-0">
                     {isPending && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <>
                         <button
                           id={`btn-accept-order-${order.id}`}
                           type="button"
                           disabled={isUpdatingStatus === order.id}
                           onClick={() => handleStatusChange(order.id, 'accepted')}
-                          className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                          className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
                         >
-                          <CheckCircle2 className="w-4 h-4" />
+                          <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
                           <span>{t('acceptOrderBtn')}</span>
                         </button>
 
@@ -1144,12 +1030,12 @@ export const OwnerOrdersTab: React.FC = () => {
                           type="button"
                           disabled={isUpdatingStatus === order.id}
                           onClick={() => setCancellingOrderId(order.id)}
-                          className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-red-950 hover:text-red-400 text-neutral-300 font-semibold text-xs flex items-center justify-center gap-1.5 border border-neutral-700 transition-all cursor-pointer"
+                          className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-red-950 hover:text-red-400 active:scale-95 text-neutral-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-neutral-700 transition-all cursor-pointer"
                         >
                           <XCircle className="w-4 h-4" />
                           <span>{t('cancelOrderBtn')}</span>
                         </button>
-                      </div>
+                      </>
                     )}
 
                     {isAccepted && (
@@ -1158,7 +1044,7 @@ export const OwnerOrdersTab: React.FC = () => {
                         type="button"
                         disabled={isUpdatingStatus === order.id}
                         onClick={() => handleStatusChange(order.id, 'on_the_way')}
-                        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md bg-orange-500 hover:bg-orange-600 text-neutral-950 shadow-orange-500/20 transition-all cursor-pointer"
+                        className="py-2 px-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-md bg-orange-500 hover:bg-orange-600 text-neutral-950 transition-all cursor-pointer"
                       >
                         <Bike className="w-4 h-4" />
                         <span>On the way</span>
@@ -1171,30 +1057,21 @@ export const OwnerOrdersTab: React.FC = () => {
                         type="button"
                         disabled={isUpdatingStatus === order.id}
                         onClick={() => handleStatusChange(order.id, 'completed')}
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                        className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>Complete Order</span>
+                        <span>Complete</span>
                       </button>
                     )}
 
-                    {isCompleted && (
-                      <div className="w-full py-2 px-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 font-black text-xs flex items-center justify-center gap-1.5 shadow-xs select-none">
-                        <Check className="w-4 h-4 stroke-[3]" />
-                        <span>JOB DONE</span>
-                      </div>
-                    )}
+                    {/* In completed tab, only order number, customer name, and total are shown */}
 
-                    {/* Print Receipt button */}
-                    <button
-                      id={`btn-print-receipt-${order.id}`}
-                      type="button"
-                      onClick={() => handlePrintReceipt(order)}
-                      className="w-full py-1.5 px-3 rounded-lg bg-neutral-950 hover:bg-neutral-800 text-neutral-400 hover:text-white font-medium text-[11px] flex items-center justify-center gap-1.5 border border-neutral-800/80 transition-colors cursor-pointer"
-                    >
-                      <Printer className="w-3 h-3" />
-                      <span>{t('printReceipt')}</span>
-                    </button>
+                    {isCancelled && (
+                      <span className="px-3 py-1.5 rounded-xl bg-red-950/80 text-red-400 border border-red-500/30 font-bold text-xs flex items-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>{language === 'th' ? 'ยกเลิกแล้ว' : 'Cancelled'}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1273,12 +1150,28 @@ export const OwnerOrdersTab: React.FC = () => {
                 </div>
 
                 {selectedOrderForDetail.orderType === 'delivery' && selectedOrderForDetail.customer?.deliveryAddress && (
-                  <div className="pt-2 border-t border-neutral-800/80 text-[11px]">
-                    <span className="text-neutral-500 block flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-orange-400" />
-                      {language === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}:
+                  <div className="pt-2 border-t border-neutral-800/80 text-[11px] space-y-1">
+                    <span className="text-neutral-500 block flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-orange-400" />
+                        {language === 'th' ? 'ที่อยู่จัดส่ง' : 'Delivery Address'}:
+                      </span>
+                      {(selectedOrderForDetail.customer.mapsUrl || selectedOrderForDetail.customer.latitude) && (
+                        <a
+                          href={
+                            selectedOrderForDetail.customer.mapsUrl ||
+                            `https://www.google.com/maps?q=${selectedOrderForDetail.customer.latitude},${selectedOrderForDetail.customer.longitude}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 text-[10px]"
+                        >
+                          <Navigation className="w-3 h-3" />
+                          <span>{language === 'th' ? '📍 ดูหมุด GPS' : '📍 View GPS'}</span>
+                        </a>
+                      )}
                     </span>
-                    <span className="text-neutral-200 block mt-0.5">{selectedOrderForDetail.customer.deliveryAddress}</span>
+                    <span className="text-neutral-200 block">{selectedOrderForDetail.customer.deliveryAddress}</span>
                   </div>
                 )}
 

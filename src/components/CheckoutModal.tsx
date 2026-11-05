@@ -6,6 +6,7 @@ import { generateOrderMessage, buildWhatsAppUrl, buildLineUrl } from '../utils/o
 import { CreateOrderParams } from '../utils/orderSync';
 import { saveCustomerOrder } from '../utils/orderHistory';
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
+import { DeliveryAddressManager } from './customer/DeliveryAddressManager';
 import {
   X,
   User,
@@ -67,6 +68,14 @@ export const CheckoutModal: React.FC = () => {
     const p = customerProfile?.notes ? customerProfile : loadCustomerProfile();
     return p.notes || '';
   });
+  const [gpsData, setGpsData] = useState<{ latitude?: number; longitude?: number; mapsUrl?: string }>(() => {
+    const p = customerProfile?.currentLatitude ? customerProfile : loadCustomerProfile();
+    return {
+      latitude: p.currentLatitude,
+      longitude: p.currentLongitude,
+      mapsUrl: p.currentMapsUrl,
+    };
+  });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -79,6 +88,13 @@ export const CheckoutModal: React.FC = () => {
       if (current.deliveryAddress) setAddress(current.deliveryAddress);
       if (current.orderType) setOrderType(current.orderType);
       if (current.notes) setNotes(current.notes);
+      if (current.currentLatitude) {
+        setGpsData({
+          latitude: current.currentLatitude,
+          longitude: current.currentLongitude,
+          mapsUrl: current.currentMapsUrl,
+        });
+      }
     }
   }, [isCheckoutOpen, customerProfile]);
 
@@ -107,6 +123,20 @@ export const CheckoutModal: React.FC = () => {
       saveCustomerProfile({ deliveryAddress: val.trim() });
       updateCustomerProfile({ deliveryAddress: val.trim() });
     }
+  };
+
+  const handleGpsChange = (gps: { latitude?: number; longitude?: number; mapsUrl?: string }) => {
+    setGpsData(gps);
+    saveCustomerProfile({
+      currentLatitude: gps.latitude,
+      currentLongitude: gps.longitude,
+      currentMapsUrl: gps.mapsUrl,
+    });
+    updateCustomerProfile({
+      currentLatitude: gps.latitude,
+      currentLongitude: gps.longitude,
+      currentMapsUrl: gps.mapsUrl,
+    });
   };
 
   const handleNotesChange = (val: string) => {
@@ -157,6 +187,9 @@ export const CheckoutModal: React.FC = () => {
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
+      currentLatitude: gpsData.latitude,
+      currentLongitude: gpsData.longitude,
+      currentMapsUrl: gpsData.mapsUrl,
     };
     saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);
@@ -191,6 +224,9 @@ export const CheckoutModal: React.FC = () => {
         phone: updatedProfile.phone,
         deliveryAddress: updatedProfile.deliveryAddress,
         notes: updatedProfile.notes,
+        latitude: gpsData.latitude,
+        longitude: gpsData.longitude,
+        mapsUrl: gpsData.mapsUrl,
       },
       items: itemSnapshots,
       subtotal: cartSubtotal,
@@ -222,6 +258,9 @@ export const CheckoutModal: React.FC = () => {
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
+      currentLatitude: gpsData.latitude,
+      currentLongitude: gpsData.longitude,
+      currentMapsUrl: gpsData.mapsUrl,
     };
     saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);
@@ -506,23 +545,22 @@ export const CheckoutModal: React.FC = () => {
                 />
               </div>
 
-              {/* Delivery Address (only if delivery) */}
+              {/* Delivery Address (only if delivery) with Multiple Saved Addresses and GPS Pinning */}
               {orderType === 'delivery' && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
+                  className="pt-1"
                 >
-                  <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                    {t('deliveryAddress')} *
-                  </label>
-                  <textarea
-                    id="checkout-address-input"
-                    rows={2}
-                    value={address}
-                    onChange={(e) => handleAddressChange(e.target.value)}
-                    placeholder={t('deliveryAddressPlaceholder')}
-                    className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100] resize-none"
+                  <DeliveryAddressManager
+                    language={language}
+                    address={address}
+                    onChangeAddress={handleAddressChange}
+                    latitude={gpsData.latitude}
+                    longitude={gpsData.longitude}
+                    mapsUrl={gpsData.mapsUrl}
+                    onGpsChange={handleGpsChange}
                   />
                 </motion.div>
               )}

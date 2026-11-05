@@ -44,6 +44,7 @@ export const defaultCustomerProfile: CustomerProfile = {
   deliveryAddress: '',
   orderType: 'pickup',
   notes: '',
+  savedAddresses: [],
 };
 
 /**
@@ -254,6 +255,10 @@ export function saveCustomerProfile(profile: Partial<CustomerProfile>): void {
       deliveryAddress: (profile.deliveryAddress !== undefined && profile.deliveryAddress.trim() !== '') ? profile.deliveryAddress.trim() : (existing.deliveryAddress || ''),
       orderType: profile.orderType || existing.orderType || 'pickup',
       notes: (profile.notes !== undefined && profile.notes.trim() !== '') ? profile.notes.trim() : (existing.notes || ''),
+      savedAddresses: profile.savedAddresses !== undefined ? profile.savedAddresses : (existing.savedAddresses || []),
+      currentLatitude: profile.currentLatitude !== undefined ? profile.currentLatitude : existing.currentLatitude,
+      currentLongitude: profile.currentLongitude !== undefined ? profile.currentLongitude : existing.currentLongitude,
+      currentMapsUrl: profile.currentMapsUrl !== undefined ? profile.currentMapsUrl : existing.currentMapsUrl,
     };
 
     const payload = JSON.stringify(merged);

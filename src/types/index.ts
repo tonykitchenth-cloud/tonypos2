@@ -143,6 +143,9 @@ export interface RestaurantOrder {
     phone: string;
     deliveryAddress?: string;
     notes?: string;
+    latitude?: number;
+    longitude?: number;
+    mapsUrl?: string;
   };
   items: OrderItemSnapshot[];
   subtotal: number;
@@ -158,12 +161,26 @@ export interface RestaurantOrder {
   customerId?: string;
 }
 
+export interface SavedDeliveryAddress {
+  id: string;
+  label: string; // e.g. "บ้าน", "ที่ทำงาน", "คอนโด" or custom
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  mapsUrl?: string;
+  isDefault?: boolean;
+}
+
 export interface CustomerProfile {
   name: string;
   phone: string;
   deliveryAddress: string;
   orderType: OrderType;
   notes?: string;
+  savedAddresses?: SavedDeliveryAddress[];
+  currentLatitude?: number;
+  currentLongitude?: number;
+  currentMapsUrl?: string;
 }
 
 export interface DailySchedule {

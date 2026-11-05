@@ -10,6 +10,7 @@ import { DesktopPOSInstallGuideModal } from './DesktopPOSInstallGuideModal';
 import { LineBrowserGuideModal } from './LineBrowserGuideModal';
 
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
+import { DeliveryAddressManager } from './customer/DeliveryAddressManager';
 
 export const CustomerProfileModal: React.FC = () => {
   const {
@@ -43,6 +44,11 @@ export const CustomerProfileModal: React.FC = () => {
   const [address, setAddress] = useState<string>(customerProfile.deliveryAddress || '');
   const [orderType, setOrderType] = useState<OrderType>(customerProfile.orderType || 'pickup');
   const [notes, setNotes] = useState<string>(customerProfile.notes || '');
+  const [gpsData, setGpsData] = useState<{ latitude?: number; longitude?: number; mapsUrl?: string }>({
+    latitude: customerProfile.currentLatitude,
+    longitude: customerProfile.currentLongitude,
+    mapsUrl: customerProfile.currentMapsUrl,
+  });
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Sync profile data whenever modal opens or customerProfile changes
@@ -54,6 +60,13 @@ export const CustomerProfileModal: React.FC = () => {
       setAddress(current.deliveryAddress || '');
       setOrderType(current.orderType || 'pickup');
       setNotes(current.notes || '');
+      if (current.currentLatitude) {
+        setGpsData({
+          latitude: current.currentLatitude,
+          longitude: current.currentLongitude,
+          mapsUrl: current.currentMapsUrl,
+        });
+      }
     }
   }, [isCustomerProfileOpen, customerProfile]);
 
@@ -67,6 +80,9 @@ export const CustomerProfileModal: React.FC = () => {
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
+      currentLatitude: gpsData.latitude,
+      currentLongitude: gpsData.longitude,
+      currentMapsUrl: gpsData.mapsUrl,
     };
     saveCustomerProfile(updated);
     updateCustomerProfile(updated);
@@ -197,18 +213,16 @@ export const CustomerProfileModal: React.FC = () => {
               />
             </div>
 
-            {/* Default Delivery Address */}
-            <div>
-              <label className="font-bold text-gray-700 block mb-1">
-                {t('deliveryAddress')}
-              </label>
-              <textarea
-                id="profile-address-input"
-                rows={2}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder={t('deliveryAddressPlaceholder')}
-                className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/30 focus:border-[#E65100] resize-none"
+            {/* Saved Delivery Addresses & GPS Pin */}
+            <div className="pt-1">
+              <DeliveryAddressManager
+                language={language}
+                address={address}
+                onChangeAddress={(val) => setAddress(val)}
+                latitude={gpsData.latitude}
+                longitude={gpsData.longitude}
+                mapsUrl={gpsData.mapsUrl}
+                onGpsChange={(gps) => setGpsData(gps)}
               />
             </div>
 

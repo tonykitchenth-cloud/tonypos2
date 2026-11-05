@@ -168,6 +168,9 @@ export interface CreateOrderParams {
     phone: string;
     deliveryAddress?: string;
     notes?: string;
+    latitude?: number;
+    longitude?: number;
+    mapsUrl?: string;
   };
   items: OrderItemSnapshot[];
   subtotal: number;
@@ -251,6 +254,9 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
       phone: params.customer.phone.trim(),
       deliveryAddress: params.customer.deliveryAddress?.trim() || '',
       notes: params.customer.notes?.trim() || '',
+      latitude: params.customer.latitude,
+      longitude: params.customer.longitude,
+      mapsUrl: params.customer.mapsUrl,
     },
     items: params.items,
     subtotal: params.subtotal,
