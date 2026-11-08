@@ -62,13 +62,39 @@
         window.dispatchEvent(new CustomEvent('pwa_app_installed'));
       });
 
-      // Register PWA Service Worker relative to current base path
+      // Register PWA Service Worker in production; unregister and purge cache in development
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('./sw.js').catch(function(err) {
-            console.debug('PWA ServiceWorker registration notice:', err);
+        var isDevEnv = window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev');
+        if (isDevEnv) {
+          if (navigator.serviceWorker.controller) {
+            try {
+              navigator.serviceWorker.controller.postMessage({ type: 'PURGE_DEV_CACHE' });
+            } catch (e) {}
+          }
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var reg of registrations) {
+              reg.unregister();
+            }
           });
-        });
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              if (keys.length > 0) {
+                Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                  if (!sessionStorage.getItem('__dev_cache_purged_v2')) {
+                    sessionStorage.setItem('__dev_cache_purged_v2', '1');
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          }
+        } else {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('./sw.js').catch(function(err) {
+              console.debug('PWA ServiceWorker registration notice:', err);
+            });
+          });
+        }
       }
     </script>
   </head>

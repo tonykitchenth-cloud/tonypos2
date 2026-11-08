@@ -27,6 +27,7 @@ import {
   saveOwnerOrder,
   updateCustomerOrderStatus,
 } from './orderHistory';
+import { loadCustomerProfile } from './storage';
 
 export const ORDERS_COLLECTION = 'orders';
 export const COUNTERS_COLLECTION = 'counters';
@@ -241,6 +242,39 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
   const user = auth.currentUser || (await ensureAuthenticatedUser());
   const customerId = user?.uid || `anon_${Math.random().toString(36).substring(2, 10)}`;
 
+  // Defensively ensure latitude/longitude/mapsUrl are populated if deliveryAddress matches any saved address in storage
+  let customerLat = params.customer.latitude;
+  let customerLng = params.customer.longitude;
+  let customerMapsUrl = params.customer.mapsUrl;
+
+  if (params.orderType === 'delivery' && (customerLat === undefined || customerLng === undefined)) {
+    try {
+      const stored = loadCustomerProfile();
+      const match = (stored.savedAddresses || []).find(
+        (a) => a.address.trim() === (params.customer.deliveryAddress || '').trim()
+      );
+      if (match?.latitude !== undefined && match?.longitude !== undefined) {
+        customerLat = match.latitude;
+        customerLng = match.longitude;
+        customerMapsUrl =
+          match.mapsUrl ||
+          `https://www.google.com/maps/search/?api=1&query=${customerLat},${customerLng}`;
+      } else if (stored.currentLatitude !== undefined && stored.currentLongitude !== undefined) {
+        customerLat = stored.currentLatitude;
+        customerLng = stored.currentLongitude;
+        customerMapsUrl =
+          stored.currentMapsUrl ||
+          `https://www.google.com/maps/search/?api=1&query=${customerLat},${customerLng}`;
+      }
+    } catch (e) {
+      console.warn('Defensive GPS resolution notice in createRestaurantOrder:', e);
+    }
+  }
+
+  if (customerLat !== undefined && customerLng !== undefined && !customerMapsUrl) {
+    customerMapsUrl = `https://www.google.com/maps/search/?api=1&query=${customerLat},${customerLng}`;
+  }
+
   const newOrder: RestaurantOrder = {
     id: orderId,
     orderNumber,
@@ -254,9 +288,9 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
       phone: params.customer.phone.trim(),
       deliveryAddress: params.customer.deliveryAddress?.trim() || '',
       notes: params.customer.notes?.trim() || '',
-      latitude: params.customer.latitude,
-      longitude: params.customer.longitude,
-      mapsUrl: params.customer.mapsUrl,
+      ...(customerLat !== undefined ? { latitude: customerLat } : {}),
+      ...(customerLng !== undefined ? { longitude: customerLng } : {}),
+      ...(customerMapsUrl ? { mapsUrl: customerMapsUrl } : {}),
     },
     items: params.items,
     subtotal: params.subtotal,

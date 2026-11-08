@@ -88,11 +88,23 @@ export const CheckoutModal: React.FC = () => {
       if (current.deliveryAddress) setAddress(current.deliveryAddress);
       if (current.orderType) setOrderType(current.orderType);
       if (current.notes) setNotes(current.notes);
-      if (current.currentLatitude) {
+
+      // Defensively match saved address to extract its exact GPS pin
+      const match = (current.savedAddresses || []).find(
+        (a) => a.address.trim() === (current.deliveryAddress || '').trim()
+      );
+      const lat = match?.latitude ?? current.currentLatitude;
+      const lng = match?.longitude ?? current.currentLongitude;
+      const url =
+        match?.mapsUrl ??
+        current.currentMapsUrl ??
+        (lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : undefined);
+
+      if (lat && lng) {
         setGpsData({
-          latitude: current.currentLatitude,
-          longitude: current.currentLongitude,
-          mapsUrl: current.currentMapsUrl,
+          latitude: lat,
+          longitude: lng,
+          mapsUrl: url,
         });
       }
     }
@@ -180,16 +192,30 @@ export const CheckoutModal: React.FC = () => {
     // 2. Validate fields
     if (!validate()) return;
 
-    // 3. Save profile details for future visits
+    // 3. Defensively resolve exact GPS coordinates from matching saved address
+    const profile = customerProfile?.savedAddresses?.length ? customerProfile : loadCustomerProfile();
+    const matchedSaved = (profile.savedAddresses || []).find(
+      (a) => a.address.trim() === address.trim()
+    );
+
+    const resolvedLat = gpsData.latitude ?? matchedSaved?.latitude ?? profile.currentLatitude;
+    const resolvedLng = gpsData.longitude ?? matchedSaved?.longitude ?? profile.currentLongitude;
+    const resolvedMapsUrl =
+      gpsData.mapsUrl ??
+      matchedSaved?.mapsUrl ??
+      profile.currentMapsUrl ??
+      (resolvedLat && resolvedLng ? `https://www.google.com/maps/search/?api=1&query=${resolvedLat},${resolvedLng}` : undefined);
+
+    // Save profile details for future visits
     const updatedProfile: CustomerProfile = {
       name: name.trim(),
       phone: phone.trim(),
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
-      currentLatitude: gpsData.latitude,
-      currentLongitude: gpsData.longitude,
-      currentMapsUrl: gpsData.mapsUrl,
+      currentLatitude: resolvedLat,
+      currentLongitude: resolvedLng,
+      currentMapsUrl: resolvedMapsUrl,
     };
     saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);
@@ -224,9 +250,9 @@ export const CheckoutModal: React.FC = () => {
         phone: updatedProfile.phone,
         deliveryAddress: updatedProfile.deliveryAddress,
         notes: updatedProfile.notes,
-        latitude: gpsData.latitude,
-        longitude: gpsData.longitude,
-        mapsUrl: gpsData.mapsUrl,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
+        mapsUrl: resolvedMapsUrl,
       },
       items: itemSnapshots,
       subtotal: cartSubtotal,
@@ -251,16 +277,29 @@ export const CheckoutModal: React.FC = () => {
     // 2. Validate fields
     if (!validate()) return;
 
-    // 3. Save profile details for future visits
+    // 3. Resolve exact GPS
+    const profile = customerProfile?.savedAddresses?.length ? customerProfile : loadCustomerProfile();
+    const matchedSaved = (profile.savedAddresses || []).find(
+      (a) => a.address.trim() === address.trim()
+    );
+
+    const resolvedLat = gpsData.latitude ?? matchedSaved?.latitude ?? profile.currentLatitude;
+    const resolvedLng = gpsData.longitude ?? matchedSaved?.longitude ?? profile.currentLongitude;
+    const resolvedMapsUrl =
+      gpsData.mapsUrl ??
+      matchedSaved?.mapsUrl ??
+      profile.currentMapsUrl ??
+      (resolvedLat && resolvedLng ? `https://www.google.com/maps/search/?api=1&query=${resolvedLat},${resolvedLng}` : undefined);
+
     const updatedProfile: CustomerProfile = {
       name: name.trim(),
       phone: phone.trim(),
       deliveryAddress: address.trim(),
       orderType,
       notes: notes.trim(),
-      currentLatitude: gpsData.latitude,
-      currentLongitude: gpsData.longitude,
-      currentMapsUrl: gpsData.mapsUrl,
+      currentLatitude: resolvedLat,
+      currentLongitude: resolvedLng,
+      currentMapsUrl: resolvedMapsUrl,
     };
     saveCustomerProfile(updatedProfile);
     updateCustomerProfile(updatedProfile);

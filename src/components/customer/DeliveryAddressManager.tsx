@@ -88,10 +88,40 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       setCurrentGps({
         latitude,
         longitude,
-        mapsUrl: mapsUrl || `https://www.google.com/maps?q=${latitude},${longitude}`,
+        mapsUrl: mapsUrl || `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
       });
     }
   }, [latitude, longitude, mapsUrl]);
+
+  // CRITICAL SYNC: Ensure the active address ALWAYS connects with its saved GPS pin
+  useEffect(() => {
+    if (address && address.trim()) {
+      const match = savedAddresses.find((a) => a.address.trim() === address.trim());
+      if (match) {
+        setSelectedAddressId(match.id);
+        if (match.latitude && match.longitude) {
+          const pinUrl =
+            match.mapsUrl ||
+            `https://www.google.com/maps/search/?api=1&query=${match.latitude},${match.longitude}`;
+          setCurrentGps({
+            latitude: match.latitude,
+            longitude: match.longitude,
+            mapsUrl: pinUrl,
+          });
+          if (onGpsChange) {
+            onGpsChange({
+              latitude: match.latitude,
+              longitude: match.longitude,
+              mapsUrl: pinUrl,
+            });
+          }
+        }
+      }
+    } else if (savedAddresses.length > 0 && !address) {
+      // Auto-select first saved address if available and address is blank
+      handleSelectSavedAddress(savedAddresses[0]);
+    }
+  }, [address, savedAddresses]);
 
   // Persist addresses to storage and sync with customer profile
   const persistSavedAddresses = (updated: SavedDeliveryAddress[]) => {

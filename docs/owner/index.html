@@ -87,15 +87,40 @@
 
       // Register PWA Service Worker relative to current base path or root
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          var swPath = './sw.js';
-          navigator.serviceWorker.register(swPath).catch(function(err) {
-            // Fallback to root sw.js
-            navigator.serviceWorker.register('../sw.js').catch(function(fallbackErr) {
-              console.debug('PWA ServiceWorker registration notice:', fallbackErr);
+        var isDevEnv = window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev');
+        if (isDevEnv) {
+          if (navigator.serviceWorker.controller) {
+            try {
+              navigator.serviceWorker.controller.postMessage({ type: 'PURGE_DEV_CACHE' });
+            } catch (e) {}
+          }
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var reg of registrations) {
+              reg.unregister();
+            }
+          });
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              if (keys.length > 0) {
+                Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                  if (!sessionStorage.getItem('__dev_cache_purged_owner_v2')) {
+                    sessionStorage.setItem('__dev_cache_purged_owner_v2', '1');
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          }
+        } else {
+          window.addEventListener('load', function() {
+            var swPath = './sw.js';
+            navigator.serviceWorker.register(swPath).catch(function(err) {
+              navigator.serviceWorker.register('../sw.js').catch(function(fallbackErr) {
+                console.debug('PWA ServiceWorker registration notice:', fallbackErr);
+              });
             });
           });
-        });
+        }
       }
     </script>
   </head>
@@ -105,7 +130,7 @@
     <script>
       // Bootstrap the Tony's Kitchen SPA for the Owner view
       (function() {
-        var isDev = window.location.port === '3000' || window.location.hostname === 'localhost';
+        var isDev = window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev');
         if (isDev) {
           // In Vite dev server mode, load the TypeScript module entry point directly
           var script = document.createElement('script');

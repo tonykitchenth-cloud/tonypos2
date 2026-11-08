@@ -17,7 +17,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  Map,
 } from 'lucide-react';
+import { InteractiveMapModal } from '../customer/InteractiveMapModal';
 
 export const RiderDashboard: React.FC = () => {
   const { allOrders, language, t } = useRestaurant();
@@ -25,6 +27,7 @@ export const RiderDashboard: React.FC = () => {
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [justCompletedOrderId, setJustCompletedOrderId] = useState<string | null>(null);
+  const [mapModalOrder, setMapModalOrder] = useState<RestaurantOrder | null>(null);
 
   // Filter orders for delivery:
   // Active deliveries: orders that are delivery type AND status is 'on_the_way' (or 'accepted' if dispatched)
@@ -281,36 +284,74 @@ export const RiderDashboard: React.FC = () => {
                           </div>
                         )}
 
-                        {/* 1-Tap Google Maps Button with GPS Coordinates Support */}
+                        {/* 1-Tap Google Maps & In-App Map with Exact GPS Pin */}
                         {(order.customer?.deliveryAddress || order.customer?.mapsUrl || order.customer?.latitude) && (
-                          <div className="space-y-1.5">
-                            {order.customer?.latitude && (
-                              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                                <span>{language === 'th' ? '📍 ปักหมุดพิกัด GPS แม่นยำจากลูกค้า' : '📍 Exact GPS Pin Pinned by Customer'}</span>
-                              </div>
+                          <div className="space-y-2 pt-1">
+                            {order.customer?.latitude && order.customer?.longitude ? (
+                              <>
+                                <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                                    <div className="min-w-0">
+                                      <span className="font-black text-white block">
+                                        {language === 'th' ? '📍 เชื่อมโยงหมุด GPS ตรงจุดจากลูกค้า' : '📍 Linked Exact Customer GPS Pin'}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-emerald-400 block truncate">
+                                        {order.customer.latitude.toFixed(6)}, {order.customer.longitude.toFixed(6)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMapModalOrder(order)}
+                                    className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-neutral-950 font-black text-[11px] flex items-center gap-1 shrink-0 transition-transform active:scale-95 cursor-pointer shadow-sm"
+                                  >
+                                    <Map className="w-3.5 h-3.5" />
+                                    <span>{language === 'th' ? 'ดูแผนที่' : 'View Map'}</span>
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {/* Direct Turn-by-Turn GPS Navigation Button */}
+                                  <a
+                                    href={`https://www.google.com/maps/dir/?api=1&destination=${order.customer.latitude},${order.customer.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/30 transition-transform active:scale-95 cursor-pointer"
+                                  >
+                                    <Navigation className="w-4 h-4 text-white" />
+                                    <span>{language === 'th' ? '🚀 เริ่มนำทาง (Google Maps)' : 'Start GPS Navigation'}</span>
+                                    <ExternalLink className="w-3 h-3 opacity-70" />
+                                  </a>
+
+                                  {/* Pin on Google Maps */}
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${order.customer.latitude},${order.customer.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <MapPin className="w-4 h-4 text-orange-400" />
+                                    <span>{language === 'th' ? 'ดูหมุดบน Google Maps' : 'View Pin on Google Maps'}</span>
+                                    <ExternalLink className="w-3 h-3 opacity-70" />
+                                  </a>
+                                </div>
+                              </>
+                            ) : (
+                              /* Fallback text search if no GPS pin */
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                  order.customer?.deliveryAddress || ''
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                              >
+                                <Navigation className="w-4 h-4 text-blue-400" />
+                                <span>{language === 'th' ? 'เปิดแผนที่ค้นหาที่อยู่ (Google Maps)' : 'Search Address on Google Maps'}</span>
+                                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                              </a>
                             )}
-                            <a
-                              href={
-                                order.customer.mapsUrl ||
-                                (order.customer.latitude && order.customer.longitude
-                                  ? `https://www.google.com/maps?q=${order.customer.latitude},${order.customer.longitude}`
-                                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                      order.customer.deliveryAddress || ''
-                                    )}`)
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                            >
-                              <Navigation className="w-4 h-4 text-blue-400" />
-                              <span>
-                                {order.customer?.latitude
-                                  ? (language === 'th' ? 'นำทางไปยังหมุด GPS ของลูกค้า' : 'Navigate to Exact GPS Pin')
-                                  : (language === 'th' ? 'เปิดแผนที่นำทาง (Google Maps)' : 'Open GPS Navigation')}
-                              </span>
-                              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                            </a>
                           </div>
                         )}
                       </div>
@@ -459,6 +500,24 @@ export const RiderDashboard: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* In-App Interactive Map Modal for Rider */}
+      {mapModalOrder && (
+        <InteractiveMapModal
+          isOpen={Boolean(mapModalOrder)}
+          onClose={() => setMapModalOrder(null)}
+          initialLat={mapModalOrder.customer?.latitude}
+          initialLng={mapModalOrder.customer?.longitude}
+          isViewOnly={true}
+          title={
+            language === 'th'
+              ? `หมุดจัดส่งของออเดอร์ ${mapModalOrder.orderNumberFormatted}`
+              : `Delivery Pin for ${mapModalOrder.orderNumberFormatted}`
+          }
+          addressText={mapModalOrder.customer?.deliveryAddress}
+          language={language}
+        />
+      )}
     </div>
   );
 };

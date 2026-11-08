@@ -1,5 +1,4 @@
-// Tony's Kitchen PWA Service Worker
-const CACHE_NAME = 'tonys-kitchen-v3';
+const CACHE_NAME = 'tonys-kitchen-v5';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
@@ -12,14 +11,19 @@ const PRECACHE_ASSETS = [
   './icon.svg'
 ];
 
+const isDev = self.location.hostname.includes('ais-dev') || self.location.hostname === 'localhost' || self.location.port === '3000';
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('[SW] Precache notice:', err);
-      });
-    }).then(() => self.skipWaiting())
-  );
+  self.skipWaiting();
+  if (!isDev) {
+    event.waitUntil(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+          console.warn('[SW] Precache notice:', err);
+        });
+      })
+    );
+  }
 });
 
 self.addEventListener('activate', (event) => {
@@ -27,25 +31,55 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (isDev || key !== CACHE_NAME) {
             return caches.delete(key);
           }
         })
       );
+    }).then(() => {
+      if (isDev) {
+        return self.registration.unregister();
+      }
     }).then(() => self.clients.claim())
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'PURGE_DEV_CACHE' || event.data.type === 'UNREGISTER')) {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).then(() => {
+      self.registration.unregister();
+    });
+  }
+});
+
 self.addEventListener('fetch', (event) => {
+  // If in dev environment, never touch cache or intercept any request
+  if (isDev) {
+    return;
+  }
+
   const url = new URL(event.request.url);
 
-  // 1. Never cache or intercept Firestore, Firebase, Google APIs, or external order sync endpoints
+  // 1. Never cache or intercept Firestore, Firebase, Google APIs, or non-GET requests
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('firebase') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('identitytoolkit') ||
     event.request.method !== 'GET'
+  ) {
+    return;
+  }
+
+  // 2. Never cache or intercept Vite dev server assets, node_modules chunks, or development sources
+  if (
+    url.pathname.includes('/node_modules/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.includes('/src/') ||
+    url.searchParams.has('v') ||
+    url.port === '3000' ||
+    url.hostname === 'localhost' ||
+    url.hostname.includes('ais-dev')
   ) {
     return;
   }

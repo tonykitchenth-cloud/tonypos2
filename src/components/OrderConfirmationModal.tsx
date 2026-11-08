@@ -228,11 +228,21 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 </div>
 
                 {orderParams.orderType === 'delivery' && orderParams.customer.deliveryAddress && (
-                  <div className="pt-2 border-t border-neutral-800/60 flex items-start gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-neutral-500 block text-[10px]">{t('deliveryAddress')}</span>
-                      <span className="font-medium text-neutral-200">{orderParams.customer.deliveryAddress}</span>
+                  <div className="pt-2 border-t border-neutral-800/60 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-neutral-500 block text-[10px]">{t('deliveryAddress')}</span>
+                          <span className="font-medium text-neutral-200 block">{orderParams.customer.deliveryAddress}</span>
+                        </div>
+                      </div>
+                      {orderParams.customer.latitude && orderParams.customer.longitude && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          GPS 📍
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}

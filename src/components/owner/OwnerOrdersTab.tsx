@@ -1160,7 +1160,7 @@ export const OwnerOrdersTab: React.FC = () => {
                         <a
                           href={
                             selectedOrderForDetail.customer.mapsUrl ||
-                            `https://www.google.com/maps?q=${selectedOrderForDetail.customer.latitude},${selectedOrderForDetail.customer.longitude}`
+                            `https://www.google.com/maps/search/?api=1&query=${selectedOrderForDetail.customer.latitude},${selectedOrderForDetail.customer.longitude}`
                           }
                           target="_blank"
                           rel="noopener noreferrer"

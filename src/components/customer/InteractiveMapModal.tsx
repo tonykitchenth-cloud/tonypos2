@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { X, Navigation, Check, ZoomIn, ZoomOut, MapPin, Loader2, Info } from 'lucide-react';
+import { X, Navigation, Check, ZoomIn, ZoomOut, MapPin, Loader2, Info, ExternalLink } from 'lucide-react';
 
 interface InteractiveMapModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialLat?: number;
   initialLng?: number;
-  onConfirmLocation: (location: { latitude: number; longitude: number; mapsUrl: string }) => void;
+  onConfirmLocation?: (location: { latitude: number; longitude: number; mapsUrl: string }) => void;
   language?: 'th' | 'en';
+  isViewOnly?: boolean;
+  title?: string;
+  addressText?: string;
 }
 
 // Default fallback location: Bangkok central coordinate
@@ -24,6 +27,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   initialLng,
   onConfirmLocation,
   language = 'th',
+  isViewOnly = false,
+  title,
+  addressText,
 }) => {
   const isThai = language === 'th';
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -57,7 +63,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
       const map = L.map(mapContainerRef.current, {
         center: [startLat, startLng],
-        zoom: initialLat ? 17 : 14,
+        zoom: initialLat ? 18 : 14,
         zoomControl: false,
         attributionControl: false,
       });
@@ -90,18 +96,20 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
         setIsMapMoving(false);
       });
 
-      // Allow clicking on map to re-center smoothly
-      map.on('click', (e) => {
-        map.panTo(e.latlng, { animate: true });
-      });
+      // Allow clicking on map to re-center smoothly (only if interactive, not view-only)
+      if (!isViewOnly) {
+        map.on('click', (e) => {
+          map.panTo(e.latlng, { animate: true });
+        });
+      }
 
       mapInstanceRef.current = map;
 
       // Force recalculation of container size
       map.invalidateSize();
 
-      // If no initialLat provided, automatically try to center on user's current GPS
-      if (!initialLat && navigator.geolocation) {
+      // If no initialLat provided and in interactive mode, try to center on user's current GPS
+      if (!initialLat && !isViewOnly && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (mapInstanceRef.current) {
@@ -114,9 +122,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
               });
             }
           },
-          () => {
-            // Silently fall back to default
-          },
+          () => {},
           { enableHighAccuracy: true, timeout: 6000 }
         );
       }
@@ -129,7 +135,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, [isOpen, initialLat, initialLng]);
+  }, [isOpen, initialLat, initialLng, isViewOnly]);
 
   // Handle Current Location GPS Click
   const handleLocateMe = () => {
@@ -182,16 +188,23 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   const handleConfirm = () => {
     const lat = currentCenter.lat;
     const lng = currentCenter.lng;
-    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-    onConfirmLocation({
-      latitude: lat,
-      longitude: lng,
-      mapsUrl,
-    });
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    if (onConfirmLocation) {
+      onConfirmLocation({
+        latitude: lat,
+        longitude: lng,
+        mapsUrl,
+      });
+    }
     onClose();
   };
 
   if (!isOpen) return null;
+
+  const lat = initialLat || currentCenter.lat;
+  const lng = initialLng || currentCenter.lng;
+  const googleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const googlePinUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs animate-fade-in">
@@ -204,10 +217,14 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-black text-[#1A1A1A]">
-                {isThai ? 'ปักหมุดตำแหน่งจัดส่ง (GPS)' : 'Pin Delivery Location'}
+                {title || (isViewOnly
+                  ? (isThai ? 'หมุดตำแหน่งจัดส่งของลูกค้า (GPS Pin)' : 'Customer Delivery GPS Pin')
+                  : (isThai ? 'ปักหมุดตำแหน่งจัดส่ง (GPS)' : 'Pin Delivery Location'))}
               </h3>
               <p className="text-[11px] text-gray-500">
-                {isThai ? 'เลื่อนแผนที่หรือลากเพื่อวางหมุดตรงหน้าบ้าน/อาคาร' : 'Drag map to align pin at your location'}
+                {addressText || (isViewOnly
+                  ? (isThai ? 'พิกัดตรงจุดที่ลูกค้าปักหมุดไว้สำหรับส่งอาหาร' : 'Exact location pinned by customer')
+                  : (isThai ? 'เลื่อนแผนที่หรือลากเพื่อวางหมุดตรงหน้าบ้าน/อาคาร' : 'Drag map to align pin at your location'))}
               </p>
             </div>
           </div>
@@ -226,16 +243,23 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
           {/* Leaflet DOM container */}
           <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-          {/* Fixed Center Pin Overlay (Grab/Uber style precision pin) */}
+          {/* Center Pin Overlay */}
           <div
             className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center"
             style={{ marginTop: '-24px' }}
           >
             <div className="relative flex flex-col items-center">
-              {/* Pin Icon with bounce effect on move */}
+              {/* Pin Tag for Rider view */}
+              {isViewOnly && (
+                <div className="mb-1 px-2.5 py-0.5 rounded-full bg-neutral-900/90 text-white text-[10px] font-bold shadow-lg border border-orange-500/40 whitespace-nowrap animate-bounce">
+                  📍 {isThai ? 'จุดส่งอาหารของลูกค้า' : 'Delivery Destination'}
+                </div>
+              )}
+
+              {/* Pin Icon */}
               <div
                 className={`transition-transform duration-200 ${
-                  isMapMoving ? '-translate-y-2 scale-110' : 'translate-y-0 scale-100'
+                  isMapMoving && !isViewOnly ? '-translate-y-2 scale-110' : 'translate-y-0 scale-100'
                 }`}
               >
                 <div className="w-10 h-10 rounded-full bg-[#E65100] text-white flex items-center justify-center shadow-2xl border-2 border-white ring-4 ring-orange-500/20">
@@ -248,7 +272,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
               {/* Ground Shadow Dot */}
               <div
                 className={`w-3 h-1.5 bg-black/40 rounded-full blur-[1px] transition-all duration-200 mt-0.5 ${
-                  isMapMoving ? 'scale-75 opacity-40' : 'scale-100 opacity-80'
+                  isMapMoving && !isViewOnly ? 'scale-75 opacity-40' : 'scale-100 opacity-80'
                 }`}
               />
             </div>
@@ -259,7 +283,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
             <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-md border border-gray-200/80 text-[11px] font-bold text-gray-700 flex items-center gap-1.5 w-fit mx-auto">
               <Info className="w-3.5 h-3.5 text-[#E65100] shrink-0" />
               <span>
-                {isMapMoving
+                {isViewOnly
+                  ? (isThai ? 'ตำแหน่งหมุด GPS แม่นยำตรงจุดจากลูกค้า' : 'Customer exact pinned GPS destination')
+                  : isMapMoving
                   ? (isThai ? 'กำลังเลื่อนหาตำแหน่ง...' : 'Moving pin location...')
                   : (isThai ? 'เลื่อนแผนที่ให้จุดตรงกลางตรงกับที่อยู่ของคุณ' : 'Move map to place pin at exact door/building')}
               </span>
@@ -268,20 +294,21 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
           {/* Map Controls: Current Location + Zoom */}
           <div className="absolute right-3 bottom-3 z-20 flex flex-col gap-2">
-            {/* My Location GPS Button */}
-            <button
-              type="button"
-              disabled={isLocating}
-              onClick={handleLocateMe}
-              className="w-11 h-11 rounded-2xl bg-white hover:bg-orange-50 active:scale-95 text-[#E65100] shadow-lg border border-gray-200 flex items-center justify-center transition-all cursor-pointer"
-              title={isThai ? 'ตำแหน่งปัจจุบันของฉัน' : 'My Current Location'}
-            >
-              {isLocating ? (
-                <Loader2 className="w-5 h-5 animate-spin text-[#E65100]" />
-              ) : (
-                <Navigation className="w-5 h-5" />
-              )}
-            </button>
+            {!isViewOnly && (
+              <button
+                type="button"
+                disabled={isLocating}
+                onClick={handleLocateMe}
+                className="w-11 h-11 rounded-2xl bg-white hover:bg-orange-50 active:scale-95 text-[#E65100] shadow-lg border border-gray-200 flex items-center justify-center transition-all cursor-pointer"
+                title={isThai ? 'ตำแหน่งปัจจุบันของฉัน' : 'My Current Location'}
+              >
+                {isLocating ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-[#E65100]" />
+                ) : (
+                  <Navigation className="w-5 h-5" />
+                )}
+              </button>
+            )}
 
             {/* Zoom In/Out Buttons */}
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
@@ -312,35 +339,63 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
           </div>
         )}
 
-        {/* Footer Area with Coordinates & Confirm Button */}
+        {/* Footer Area with Coordinates & Action Buttons */}
         <div className="p-4 bg-white border-t border-gray-100 space-y-3 shrink-0">
           <div className="flex items-center justify-between text-xs">
             <span className="text-gray-500 font-bold">
-              {isThai ? 'พิกัด GPS ที่เลือก:' : 'Selected Coordinates:'}
+              {isThai ? 'พิกัด GPS:' : 'GPS Coordinates:'}
             </span>
             <span className="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-lg text-[11px]">
-              {currentCenter.lat.toFixed(6)}, {currentCenter.lng.toFixed(6)}
+              {lat.toFixed(6)}, {lng.toFixed(6)}
             </span>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="py-3 px-4 rounded-2xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-xs transition-colors"
-            >
-              {isThai ? 'ยกเลิก' : 'Cancel'}
-            </button>
-            <button
-              type="button"
-              id="btn-confirm-pin-location"
-              onClick={handleConfirm}
-              className="flex-1 py-3 px-4 rounded-2xl bg-[#E65100] hover:bg-[#D84315] active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Check className="w-4 h-4 stroke-[3]" />
-              <span>{isThai ? 'ยืนยันตำแหน่งหมุดนี้' : 'Confirm This Location'}</span>
-            </button>
-          </div>
+          {isViewOnly ? (
+            /* Rider / Viewer Action Buttons */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <a
+                href={googleNavUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Navigation className="w-4 h-4" />
+                <span>{isThai ? '🚀 นำทางทันที (Google Maps)' : 'Start GPS Navigation'}</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+              </a>
+
+              <a
+                href={googlePinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>{isThai ? '📍 เปิดดูหมุดใน Google Maps' : 'View Pin on Google Maps'}</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+              </a>
+            </div>
+          ) : (
+            /* Customer Edit/Confirm Action Buttons */
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-3 px-4 rounded-2xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-xs transition-colors"
+              >
+                {isThai ? 'ยกเลิก' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-pin-location"
+                onClick={handleConfirm}
+                className="flex-1 py-3 px-4 rounded-2xl bg-[#E65100] hover:bg-[#D84315] active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>{isThai ? 'ยืนยันตำแหน่งหมุดนี้' : 'Confirm This Location'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
