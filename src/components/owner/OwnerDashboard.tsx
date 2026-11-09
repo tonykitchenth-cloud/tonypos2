@@ -24,6 +24,7 @@ import { OwnerPOSInstallButton } from './OwnerPOSInstallButton';
 import { orderNotificationService } from '../../services/orderNotificationService';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo, getLogoUrl, getOwnerShareUrl } from '../../utils/navigation';
+import { translateThaiToEnglish } from '../../utils/translator';
 import {
   X,
   LogOut,
@@ -185,6 +186,193 @@ export const OwnerDashboard: React.FC = () => {
 
   const [notification, setNotification] = useState<string | null>(null);
 
+  // ----------------------------------------------------
+  // THAI-FIRST AUTO-TRANSLATION STATE & HANDLERS
+  // ----------------------------------------------------
+  const [isTranslatingItemName, setIsTranslatingItemName] = useState(false);
+  const [isTranslatingItemDesc, setIsTranslatingItemDesc] = useState(false);
+  const [isTranslatingCatName, setIsTranslatingCatName] = useState(false);
+  const [isTranslatingGroupName, setIsTranslatingGroupName] = useState(false);
+  const [translatingOptId, setTranslatingOptId] = useState<string | null>(null);
+
+  const itemNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const itemDescDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const catNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const groupNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const optDebounceMapRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const handleDishThaiNameChange = (val: string) => {
+    setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
+    if (itemNameDebounceRef.current) clearTimeout(itemNameDebounceRef.current);
+    if (!val.trim()) return;
+    itemNameDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingItemName(true);
+        const en = await translateThaiToEnglish(val);
+        if (en) {
+          setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+        }
+      } catch (err) {
+        console.error('Translation error:', err);
+      } finally {
+        setIsTranslatingItemName(false);
+      }
+    }, 500);
+  };
+
+  const handleTriggerItemNameTranslate = async () => {
+    if (!editingItem?.name.th.trim()) return;
+    setIsTranslatingItemName(true);
+    try {
+      const en = await translateThaiToEnglish(editingItem.name.th);
+      if (en) {
+        setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslatingItemName(false);
+    }
+  };
+
+  const handleDishThaiDescChange = (val: string) => {
+    setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, th: val } } : null);
+    if (itemDescDebounceRef.current) clearTimeout(itemDescDebounceRef.current);
+    if (!val.trim()) return;
+    itemDescDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingItemDesc(true);
+        const en = await translateThaiToEnglish(val);
+        if (en) {
+          setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, en } } : null);
+        }
+      } catch (err) {
+        console.error('Translation error:', err);
+      } finally {
+        setIsTranslatingItemDesc(false);
+      }
+    }, 600);
+  };
+
+  const handleTriggerItemDescTranslate = async () => {
+    if (!editingItem?.description.th.trim()) return;
+    setIsTranslatingItemDesc(true);
+    try {
+      const en = await translateThaiToEnglish(editingItem.description.th);
+      if (en) {
+        setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, en } } : null);
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslatingItemDesc(false);
+    }
+  };
+
+  const handleCatThaiNameChange = (val: string) => {
+    setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
+    if (catNameDebounceRef.current) clearTimeout(catNameDebounceRef.current);
+    if (!val.trim()) return;
+    catNameDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingCatName(true);
+        const en = await translateThaiToEnglish(val);
+        if (en) {
+          setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+        }
+      } catch (err) {
+        console.error('Translation error:', err);
+      } finally {
+        setIsTranslatingCatName(false);
+      }
+    }, 500);
+  };
+
+  const handleTriggerCatTranslate = async () => {
+    if (!editingCategory?.name.th.trim()) return;
+    setIsTranslatingCatName(true);
+    try {
+      const en = await translateThaiToEnglish(editingCategory.name.th);
+      if (en) {
+        setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslatingCatName(false);
+    }
+  };
+
+  const handleGroupThaiNameChange = (val: string) => {
+    setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
+    if (groupNameDebounceRef.current) clearTimeout(groupNameDebounceRef.current);
+    if (!val.trim()) return;
+    groupNameDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingGroupName(true);
+        const en = await translateThaiToEnglish(val);
+        if (en) {
+          setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+        }
+      } catch (err) {
+        console.error('Translation error:', err);
+      } finally {
+        setIsTranslatingGroupName(false);
+      }
+    }, 500);
+  };
+
+  const handleTriggerGroupTranslate = async () => {
+    if (!editingGroup?.name.th.trim()) return;
+    setIsTranslatingGroupName(true);
+    try {
+      const en = await translateThaiToEnglish(editingGroup.name.th);
+      if (en) {
+        setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslatingGroupName(false);
+    }
+  };
+
+  const handleOptionThaiNameChange = (optIdx: number, optId: string, val: string) => {
+    setEditingGroup(prev => {
+      if (!prev) return null;
+      const newOpts = [...prev.options];
+      newOpts[optIdx] = { ...newOpts[optIdx], name: { ...newOpts[optIdx].name, th: val } };
+      return { ...prev, options: newOpts };
+    });
+
+    if (optDebounceMapRef.current[optId]) {
+      clearTimeout(optDebounceMapRef.current[optId]);
+    }
+    if (!val.trim()) return;
+
+    optDebounceMapRef.current[optId] = setTimeout(async () => {
+      try {
+        setTranslatingOptId(optId);
+        const en = await translateThaiToEnglish(val);
+        if (en) {
+          setEditingGroup(prev => {
+            if (!prev) return null;
+            const newOpts = [...prev.options];
+            const targetIdx = newOpts.findIndex(o => o.id === optId);
+            if (targetIdx >= 0) {
+              newOpts[targetIdx] = { ...newOpts[targetIdx], name: { ...newOpts[targetIdx].name, en } };
+            }
+            return { ...prev, options: newOpts };
+          });
+        }
+      } catch (err) {
+        console.error('Translation error:', err);
+      } finally {
+        setTranslatingOptId(null);
+      }
+    }, 500);
+  };
+
   if (!isOwnerMode) return null;
 
   const showToast = (msg: string) => {
@@ -290,11 +478,23 @@ export const OwnerDashboard: React.FC = () => {
   // MENU ITEM CRUD OPERATIONS
   // ----------------------------------------------------
   const handleSaveMenuItem = (item: MenuItem) => {
+    const safeItem: MenuItem = {
+      ...item,
+      name: {
+        th: item.name?.th?.trim() || item.name?.en?.trim() || 'Untitled',
+        en: item.name?.en?.trim() || item.name?.th?.trim() || 'Untitled',
+      },
+      description: {
+        th: item.description?.th || '',
+        en: item.description?.en || item.description?.th || '',
+      },
+    };
+
     if (isAddingItem) {
-      setMenuItems(prev => [...prev, item]);
+      setMenuItems(prev => [...prev, safeItem]);
       showToast(t('itemCreated'));
     } else {
-      setMenuItems(prev => prev.map(i => (i.id === item.id ? item : i)));
+      setMenuItems(prev => prev.map(i => (i.id === safeItem.id ? safeItem : i)));
       showToast(t('itemUpdated'));
     }
     setEditingItem(null);
@@ -351,10 +551,18 @@ export const OwnerDashboard: React.FC = () => {
   // CATEGORY CRUD OPERATIONS
   // ----------------------------------------------------
   const handleSaveCategory = (cat: Category) => {
+    const safeCat: Category = {
+      ...cat,
+      name: {
+        th: cat.name?.th?.trim() || cat.name?.en?.trim() || 'Untitled Category',
+        en: cat.name?.en?.trim() || cat.name?.th?.trim() || 'Untitled Category',
+      },
+    };
+
     if (isAddingCategory) {
-      setCategories(prev => [...prev, cat]);
+      setCategories(prev => [...prev, safeCat]);
     } else {
-      setCategories(prev => prev.map(c => (c.id === cat.id ? cat : c)));
+      setCategories(prev => prev.map(c => (c.id === safeCat.id ? safeCat : c)));
     }
     setEditingCategory(null);
     setIsAddingCategory(false);
@@ -386,10 +594,25 @@ export const OwnerDashboard: React.FC = () => {
   // MODIFIER GROUP & OPTION CRUD & ORDERING
   // ----------------------------------------------------
   const handleSaveModifierGroup = (group: ModifierGroup) => {
+    const safeGroup: ModifierGroup = {
+      ...group,
+      name: {
+        th: group.name?.th?.trim() || group.name?.en?.trim() || 'Untitled Group',
+        en: group.name?.en?.trim() || group.name?.th?.trim() || 'Untitled Group',
+      },
+      options: group.options.map(opt => ({
+        ...opt,
+        name: {
+          th: opt.name?.th?.trim() || opt.name?.en?.trim() || 'Untitled Option',
+          en: opt.name?.en?.trim() || opt.name?.th?.trim() || 'Untitled Option',
+        },
+      })),
+    };
+
     if (isAddingGroup) {
-      setModifierGroups(prev => [...prev, group]);
+      setModifierGroups(prev => [...prev, safeGroup]);
     } else {
-      setModifierGroups(prev => prev.map(g => (g.id === group.id ? group : g)));
+      setModifierGroups(prev => prev.map(g => (g.id === safeGroup.id ? safeGroup : g)));
     }
     setEditingGroup(null);
     setIsAddingGroup(false);
@@ -2438,44 +2661,121 @@ export const OwnerDashboard: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+              {/* 1. Thai Name FIRST (Primary) */}
               <div>
-                <label className="font-bold text-gray-700 block mb-1">English Name *</label>
-                <input
-                  type="text"
-                  value={editingItem.name.en}
-                  onChange={(e) => setEditingItem({ ...editingItem, name: { ...editingItem.name, en: e.target.value } })}
-                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Thai Name *</label>
+                <label className="font-bold text-gray-800 flex items-center justify-between mb-1">
+                  <span>
+                    ชื่อรายการอาหาร (ภาษาไทย) * <span className="text-[10px] text-[#E65100] font-black px-1.5 py-0.5 bg-orange-50 rounded">ภาษาหลัก</span>
+                  </span>
+                </label>
                 <input
                   type="text"
                   value={editingItem.name.th}
-                  onChange={(e) => setEditingItem({ ...editingItem, name: { ...editingItem.name, th: e.target.value } })}
-                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
+                  onChange={(e) => handleDishThaiNameChange(e.target.value)}
+                  placeholder="เช่น ข้าวกะเพราหมูกรอบ, ต้มยำกุ้ง..."
+                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
                 />
               </div>
 
+              {/* 2. English Name SECOND (Auto-translated, Editable) */}
               <div>
-                <label className="font-bold text-gray-700 block mb-1">English Description *</label>
-                <textarea
-                  rows={2}
-                  value={editingItem.description.en}
-                  onChange={(e) => setEditingItem({ ...editingItem, description: { ...editingItem.description, en: e.target.value } })}
-                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-gray-700">
+                    ชื่อภาษาอังกฤษ (English Name) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleTriggerItemNameTranslate}
+                    disabled={isTranslatingItemName || !editingItem.name.th.trim()}
+                    className="text-[11px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                    title="กดเพื่อแปลภาษาอังกฤษอัตโนมัติ"
+                  >
+                    {isTranslatingItemName ? (
+                      <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                        <Sparkles className="w-3 h-3 animate-spin" />
+                        กำลังแปล...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200/60">
+                        <Sparkles className="w-3 h-3 text-[#E65100]" />
+                        แปลอัตโนมัติ
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={editingItem.name.en}
+                    onChange={(e) => setEditingItem({ ...editingItem, name: { ...editingItem.name, en: e.target.value } })}
+                    placeholder="e.g. Crispy Pork Holy Basil Rice (Auto-translated, editable)"
+                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
+                  />
+                  {isTranslatingItemName && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  แปลอัตโนมัติจากชื่อไทย สามารถแก้ไขเพิ่มเติมหรือพิมพ์เองได้ตลอดเวลา
+                </p>
               </div>
 
+              {/* 3. Thai Description FIRST */}
               <div>
-                <label className="font-bold text-gray-700 block mb-1">Thai Description *</label>
+                <label className="font-bold text-gray-800 flex items-center justify-between mb-1">
+                  <span>คำอธิบายอาหาร (ภาษาไทย)</span>
+                </label>
                 <textarea
                   rows={2}
                   value={editingItem.description.th}
-                  onChange={(e) => setEditingItem({ ...editingItem, description: { ...editingItem.description, th: e.target.value } })}
-                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
+                  onChange={(e) => handleDishThaiDescChange(e.target.value)}
+                  placeholder="เช่น เสิร์ฟพร้อมข้าวสวยร้อนๆ หมูกรอบทอดกรอบสูตรเด็ดของร้าน..."
+                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
                 />
+              </div>
+
+              {/* 4. English Description SECOND */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-gray-700">
+                    คำอธิบายภาษาอังกฤษ (English Description)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleTriggerItemDescTranslate}
+                    disabled={isTranslatingItemDesc || !editingItem.description.th.trim()}
+                    className="text-[11px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                    title="กดเพื่อแปลคำอธิบายเป็นภาษาอังกฤษอัตโนมัติ"
+                  >
+                    {isTranslatingItemDesc ? (
+                      <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                        <Sparkles className="w-3 h-3 animate-spin" />
+                        กำลังแปล...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200/60">
+                        <Sparkles className="w-3 h-3 text-[#E65100]" />
+                        แปลอัตโนมัติ
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    rows={2}
+                    value={editingItem.description.en}
+                    onChange={(e) => setEditingItem({ ...editingItem, description: { ...editingItem.description, en: e.target.value } })}
+                    placeholder="e.g. Served with hot jasmine rice and signature crispy pork (Auto-translated, editable)"
+                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
+                  />
+                  {isTranslatingItemDesc && (
+                    <div className="absolute right-3 top-3">
+                      <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -2721,40 +3021,84 @@ export const OwnerDashboard: React.FC = () => {
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
           <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-3">
             <h3 className="text-sm font-black text-[#1A1A1A]">
-              {isAddingCategory ? 'Add Category' : 'Edit Category'}
+              {isAddingCategory ? 'เพิ่มหมวดหมู่อาหาร (Add Category)' : 'แก้ไขหมวดหมู่ (Edit Category)'}
             </h3>
+
+            {/* 1. Thai Category Name FIRST (Primary) */}
             <div>
-              <label className="text-xs font-bold text-gray-700 block mb-1">English Name</label>
-              <input
-                type="text"
-                value={editingCategory.name.en}
-                onChange={(e) => setEditingCategory({ ...editingCategory, name: { ...editingCategory.name, en: e.target.value } })}
-                className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-700 block mb-1">Thai Name</label>
+              <label className="text-xs font-bold text-gray-800 flex items-center justify-between mb-1">
+                <span>
+                  ชื่อหมวดหมู่ (ภาษาไทย) * <span className="text-[10px] text-[#E65100] font-black px-1.5 py-0.5 bg-orange-50 rounded">ภาษาหลัก</span>
+                </span>
+              </label>
               <input
                 type="text"
                 value={editingCategory.name.th}
-                onChange={(e) => setEditingCategory({ ...editingCategory, name: { ...editingCategory.name, th: e.target.value } })}
-                className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs"
+                onChange={(e) => handleCatThaiNameChange(e.target.value)}
+                placeholder="เช่น เมนูข้าว, ต้มยำ, เครื่องดื่ม..."
+                className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
               />
             </div>
+
+            {/* 2. English Category Name SECOND */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-gray-700">
+                  ชื่อหมวดหมู่ภาษาอังกฤษ (English Name) *
+                </label>
+                <button
+                  type="button"
+                  onClick={handleTriggerCatTranslate}
+                  disabled={isTranslatingCatName || !editingCategory.name.th.trim()}
+                  className="text-[10px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                  title="แปลชื่อหมวดหมู่อัตโนมัติ"
+                >
+                  {isTranslatingCatName ? (
+                    <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                      <Sparkles className="w-3 h-3 animate-spin" />
+                      กำลังแปล...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
+                      <Sparkles className="w-3 h-3 text-[#E65100]" />
+                      แปลอัตโนมัติ
+                    </span>
+                  )}
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={editingCategory.name.en}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: { ...editingCategory.name, en: e.target.value } })}
+                  placeholder="e.g. Rice Dishes (Auto-translated, editable)"
+                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
+                />
+                {isTranslatingCatName && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                แปลภาษาอังกฤษอัตโนมัติ และพิมพ์แก้ไขเพิ่มเติมได้ตามต้องการ
+              </p>
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setEditingCategory(null)}
                 className="px-3 py-1.5 rounded-xl text-gray-600 hover:bg-gray-100 text-xs font-bold"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 type="button"
                 onClick={() => handleSaveCategory(editingCategory)}
-                className="px-3 py-1.5 rounded-xl bg-[#E65100] text-white text-xs font-bold"
+                className="px-3 py-1.5 rounded-xl bg-[#E65100] text-white text-xs font-bold hover:bg-[#D84315]"
               >
-                Save
+                {t('saveChanges')}
               </button>
             </div>
           </div>
@@ -2766,28 +3110,65 @@ export const OwnerDashboard: React.FC = () => {
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
           <div className="bg-white rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col p-5 space-y-3 overflow-hidden">
             <h3 className="text-sm font-black text-[#1A1A1A]">
-              {isAddingGroup ? 'Add Modifier Group' : 'Edit Modifier Group'}
+              {isAddingGroup ? 'เพิ่มกลุ่มตัวเลือกเสริม (Add Modifier Group)' : 'แก้ไขกลุ่มตัวเลือกเสริม (Edit Modifier Group)'}
             </h3>
             <div className="flex-1 overflow-y-auto space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">English Name</label>
+              {/* 1. Thai Group Name FIRST (Primary) */}
+              <div>
+                <label className="font-bold text-gray-800 flex items-center justify-between mb-1">
+                  <span>
+                    ชื่อกลุ่มตัวเลือก (ภาษาไทย) * <span className="text-[10px] text-[#E65100] font-black px-1.5 py-0.5 bg-orange-50 rounded">ภาษาหลัก</span>
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={editingGroup.name.th}
+                  onChange={(e) => handleGroupThaiNameChange(e.target.value)}
+                  placeholder="เช่น ระดับความเผ็ด, เลือกเนื้อสัตว์, ท็อปปิ้ง..."
+                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
+                />
+              </div>
+
+              {/* 2. English Group Name SECOND */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-gray-700">ชื่อกลุ่มภาษาอังกฤษ (English Name) *</label>
+                  <button
+                    type="button"
+                    onClick={handleTriggerGroupTranslate}
+                    disabled={isTranslatingGroupName || !editingGroup.name.th.trim()}
+                    className="text-[10px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                  >
+                    {isTranslatingGroupName ? (
+                      <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                        <Sparkles className="w-3 h-3 animate-spin" />
+                        กำลังแปล...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
+                        <Sparkles className="w-3 h-3 text-[#E65100]" />
+                        แปลอัตโนมัติ
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div className="relative">
                   <input
                     type="text"
                     value={editingGroup.name.en}
                     onChange={(e) => setEditingGroup({ ...editingGroup, name: { ...editingGroup.name, en: e.target.value } })}
-                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
+                    placeholder="e.g. Spiciness Level (Auto-translated, editable)"
+                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
                   />
+                  {isTranslatingGroupName && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Thai Name</label>
-                  <input
-                    type="text"
-                    value={editingGroup.name.th}
-                    onChange={(e) => setEditingGroup({ ...editingGroup, name: { ...editingGroup.name, th: e.target.value } })}
-                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200"
-                  />
-                </div>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  แปลอัตโนมัติจากชื่อไทย สามารถแก้ไขเพิ่มเติมหรือพิมพ์เองได้ตลอดเวลา
+                </p>
               </div>
 
               <div className="flex items-center gap-4">
@@ -2814,7 +3195,7 @@ export const OwnerDashboard: React.FC = () => {
               {/* Options list editor */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="font-bold text-gray-700">Options in this Group</label>
+                  <label className="font-bold text-gray-700">รายการตัวเลือกในกลุ่มนี้ (Options in this Group)</label>
                   <button
                     type="button"
                     onClick={() => {
@@ -2827,7 +3208,7 @@ export const OwnerDashboard: React.FC = () => {
                       };
                       setEditingGroup({ ...editingGroup, options: [...editingGroup.options, newOpt] });
                     }}
-                    className="text-[11px] font-bold text-[#E65100] hover:underline"
+                    className="text-[11px] font-bold text-[#E65100] hover:underline cursor-pointer"
                   >
                     + Add Option
                   </button>
@@ -2836,29 +3217,40 @@ export const OwnerDashboard: React.FC = () => {
                 <div className="space-y-2">
                   {editingGroup.options.map((opt, optIdx) => (
                     <div key={opt.id} className="p-2.5 bg-gray-50 rounded-xl space-y-1.5 border border-gray-100">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="EN Name"
-                          value={opt.name.en}
-                          onChange={(e) => {
-                            const newOpts = [...editingGroup.options];
-                            newOpts[optIdx] = { ...opt, name: { ...opt.name, en: e.target.value } };
-                            setEditingGroup({ ...editingGroup, options: newOpts });
-                          }}
-                          className="bg-white px-2 py-1 rounded-lg border border-gray-200"
-                        />
-                        <input
-                          type="text"
-                          placeholder="TH Name"
-                          value={opt.name.th}
-                          onChange={(e) => {
-                            const newOpts = [...editingGroup.options];
-                            newOpts[optIdx] = { ...opt, name: { ...opt.name, th: e.target.value } };
-                            setEditingGroup({ ...editingGroup, options: newOpts });
-                          }}
-                          className="bg-white px-2 py-1 rounded-lg border border-gray-200"
-                        />
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Option Thai Name FIRST */}
+                        <div>
+                          <label className="text-[10px] text-gray-600 font-bold block mb-0.5">
+                            ชื่อตัวเลือก (ไทย) *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="เช่น เผ็ดน้อย, หมูกรอบ"
+                            value={opt.name.th}
+                            onChange={(e) => handleOptionThaiNameChange(optIdx, opt.id, e.target.value)}
+                            className="w-full bg-white px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:border-[#E65100]"
+                          />
+                        </div>
+                        {/* Option English Name SECOND */}
+                        <div>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <label className="text-[10px] text-gray-600 font-bold">ชื่อภาษาอังกฤษ</label>
+                            {translatingOptId === opt.id && (
+                              <span className="text-[9px] text-[#E65100] animate-pulse">กำลังแปล...</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mild, Crispy Pork"
+                            value={opt.name.en}
+                            onChange={(e) => {
+                              const newOpts = [...editingGroup.options];
+                              newOpts[optIdx] = { ...opt, name: { ...opt.name, en: e.target.value } };
+                              setEditingGroup({ ...editingGroup, options: newOpts });
+                            }}
+                            className="w-full bg-white px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:border-[#E65100]"
+                          />
+                        </div>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1">
