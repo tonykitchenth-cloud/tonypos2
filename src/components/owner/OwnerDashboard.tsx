@@ -61,6 +61,7 @@ import {
   Loader2,
   Bike,
   Printer,
+  Search,
 } from 'lucide-react';
 
 type OwnerTab =
@@ -177,8 +178,11 @@ export const OwnerDashboard: React.FC = () => {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSavingLogo, setIsSavingLogo] = useState(false);
 
-  // Reset Demo Confirmation state
+  // Menu & Category unified view filter & search state
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   const [notification, setNotification] = useState<string | null>(null);
 
   if (!isOwnerMode) return null;
@@ -318,6 +322,28 @@ export const OwnerDashboard: React.FC = () => {
 
       // Update display orders
       return newItems.map((item, idx) => ({ ...item, displayOrder: idx + 1 }));
+    });
+  };
+
+  const handleMoveMenuItemWithinCategory = (itemId: string, direction: 'up' | 'down') => {
+    setMenuItems(prev => {
+      const item = prev.find(i => i.id === itemId);
+      if (!item) return prev;
+      const categoryItems = prev.filter(i => i.categoryId === item.categoryId).sort((a, b) => a.displayOrder - b.displayOrder);
+      const catIndex = categoryItems.findIndex(i => i.id === itemId);
+      const targetCatIndex = direction === 'up' ? catIndex - 1 : catIndex + 1;
+      if (targetCatIndex < 0 || targetCatIndex >= categoryItems.length) return prev;
+
+      const targetItem = categoryItems[targetCatIndex];
+      const globalIndex = prev.findIndex(i => i.id === itemId);
+      const globalTargetIndex = prev.findIndex(i => i.id === targetItem.id);
+
+      const newItems = [...prev];
+      const temp = newItems[globalIndex];
+      newItems[globalIndex] = newItems[globalTargetIndex];
+      newItems[globalTargetIndex] = temp;
+
+      return newItems.map((it, idx) => ({ ...it, displayOrder: idx + 1 }));
     });
   };
 
@@ -598,8 +624,7 @@ export const OwnerDashboard: React.FC = () => {
             {[
               { id: 'orders', label: t('ordersTab'), icon: ShoppingBag, badge: pendingOrdersCount },
               { id: 'overview', label: t('dashboardTab'), icon: LayoutDashboard },
-              { id: 'menu', label: t('menuTab'), icon: UtensilsCrossed },
-              { id: 'categories', label: t('categoriesTab'), icon: Tags },
+              { id: 'menu', label: t('menuTab'), icon: UtensilsCrossed, badge: menuItems.length },
               { id: 'modifiers', label: t('modifiersTab'), icon: Sliders },
               { id: 'hours', label: t('hoursTab'), icon: Clock },
               { id: 'holidays', label: t('holidaysTab'), icon: Calendar },
@@ -610,7 +635,7 @@ export const OwnerDashboard: React.FC = () => {
               { id: 'data', label: t('systemTab'), icon: Database },
             ].map(tab => {
               const Icon = tab.icon;
-              const isSelected = activeTab === tab.id;
+              const isSelected = activeTab === tab.id || (tab.id === 'menu' && activeTab === 'categories');
               const badge = (tab as any).badge;
               return (
                 <button
@@ -883,223 +908,532 @@ export const OwnerDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* ---------------- MENU TAB ---------------- */}
-            {activeTab === 'menu' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+            {/* ---------------- MENU & CATEGORIES TAB ---------------- */}
+            {(activeTab === 'menu' || activeTab === 'categories') && (
+              <div className="space-y-6">
+                {/* Header with Title & Action Buttons */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-extrabold text-[#1A1A1A]">Menu Item Manager</h2>
+                    <h2 className="text-base sm:text-lg font-extrabold text-[#1A1A1A]">
+                      {language === 'th' ? 'จัดการเมนูและหมวดหมู่อาหาร' : 'Menu & Category Manager'}
+                    </h2>
                     <p className="text-xs text-gray-500">
-                      Create, edit, reorder, adjust stock, and attach modifiers to dishes.
+                      {language === 'th'
+                        ? 'จัดกลุ่มรายการอาหารตามหมวดหมู่ เพิ่มหมวดหมู่ใหม่ และแก้ไขรายละเอียดเมนูอาหาร'
+                        : 'Organize dishes by category, create categories, and edit dish prices and availability.'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    id="add-dish-btn"
-                    onClick={() => {
-                      setIsAddingItem(true);
-                      setFoodImageError(null);
-                      setShowRemoveImageConfirm(false);
-                      setEditingItem({
-                        id: `item_${Date.now()}`,
-                        categoryId: categories[0]?.id || 'cat-rice',
-                        name: { en: '', th: '' },
-                        description: { en: '', th: '' },
-                        imageUrl: '',
-                        basePrice: 100,
-                        availability: 'available',
-                        isSignature: false,
-                        isPopular: false,
-                        displayOrder: menuItems.length + 1,
-                        modifierGroupIds: [],
-                      });
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#E65100] text-white text-xs font-extrabold hover:bg-[#D84315] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>{t('addItem')}</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingCategory(true);
+                        setEditingCategory({
+                          id: `cat_${Date.now()}`,
+                          name: { en: '', th: '' },
+                          displayOrder: categories.length + 1,
+                          visible: true,
+                        });
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-white border border-gray-300 text-gray-700 text-xs font-bold hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-[#E65100]" />
+                      <span>{language === 'th' ? '+ เพิ่มหมวดหมู่' : '+ Add Category'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="add-dish-btn"
+                      onClick={() => {
+                        setIsAddingItem(true);
+                        setFoodImageError(null);
+                        setShowRemoveImageConfirm(false);
+                        setEditingItem({
+                          id: `item_${Date.now()}`,
+                          categoryId: selectedCategoryFilter !== 'all' ? selectedCategoryFilter : (categories[0]?.id || 'cat-rice'),
+                          name: { en: '', th: '' },
+                          description: { en: '', th: '' },
+                          imageUrl: '',
+                          basePrice: 100,
+                          availability: 'available',
+                          isSignature: false,
+                          isPopular: false,
+                          displayOrder: menuItems.length + 1,
+                          modifierGroupIds: [],
+                        });
+                      }}
+                      className="px-4 py-2 rounded-xl bg-[#E65100] text-white text-xs font-extrabold hover:bg-[#D84315] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{language === 'th' ? '+ เพิ่มรายการอาหาร' : '+ Add Dish'}</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Menu Item List */}
-                <div className="bg-white rounded-3xl border border-gray-200 shadow-xs divide-y divide-gray-100 overflow-hidden">
-                  {menuItems.map((item, idx) => {
-                    const cat = categories.find(c => c.id === item.categoryId);
-                    return (
-                      <div key={item.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-gray-50/70 transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Image */}
-                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
-                            {item.imageUrl ? (
-                              <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <ImageOff className="w-5 h-5 text-gray-300" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h4 className="text-xs sm:text-sm font-bold text-[#1A1A1A]">
-                                {item.name?.en || (typeof item.name === 'string' ? item.name : 'Untitled')}
-                              </h4>
-                              <span className="text-xs text-gray-400 font-normal">
-                                ({item.name?.th || ''})
+                {/* Search & Category Filter Toolbar */}
+                <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={menuSearchQuery}
+                        onChange={(e) => setMenuSearchQuery(e.target.value)}
+                        placeholder={
+                          language === 'th'
+                            ? 'ค้นหาชื่ออาหาร, หมวดหมู่ หรือคำอธิบาย...'
+                            : 'Search dish name, category, or description...'
+                        }
+                        className="w-full pl-9 pr-8 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/20 focus:border-[#E65100]"
+                      />
+                      {menuSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setMenuSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategoryFilter('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                        selectedCategoryFilter === 'all'
+                          ? 'bg-[#E65100] text-white shadow-2xs'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80'
+                      }`}
+                    >
+                      {language === 'th' ? 'ทุกหมวดหมู่' : 'All Categories'} ({menuItems.length})
+                    </button>
+                    {categories.map((cat) => {
+                      const count = menuItems.filter((i) => i.categoryId === cat.id).length;
+                      const isSelected = selectedCategoryFilter === cat.id;
+                      const catName = (language === 'th' ? cat.name?.th : cat.name?.en) || cat.name?.en || cat.name?.th || (typeof cat.name === 'string' ? cat.name : 'Untitled');
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedCategoryFilter(cat.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#E65100] text-white shadow-2xs'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80'
+                          }`}
+                        >
+                          {catName} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Categories & Dishes Grouped List */}
+                <div className="space-y-5">
+                  {categories
+                    .filter((cat) => selectedCategoryFilter === 'all' || selectedCategoryFilter === cat.id)
+                    .map((cat, catIdx) => {
+                      const rawCategoryItems = menuItems.filter((item) => item.categoryId === cat.id);
+                      // Filter by search query if any
+                      const q = menuSearchQuery.trim().toLowerCase();
+                      const categoryItems = rawCategoryItems.filter((item) => {
+                        if (!q) return true;
+                        const enName = (item.name?.en || '').toLowerCase();
+                        const thName = (item.name?.th || '').toLowerCase();
+                        const enDesc = (item.description?.en || '').toLowerCase();
+                        const thDesc = (item.description?.th || '').toLowerCase();
+                        return enName.includes(q) || thName.includes(q) || enDesc.includes(q) || thDesc.includes(q);
+                      });
+
+                      // If searching and this category has no matching items, we can hide it or show empty
+                      if (q && categoryItems.length === 0) {
+                        return null;
+                      }
+
+                      const primaryName = (language === 'th' ? cat.name?.th : cat.name?.en) || cat.name?.en || cat.name?.th || (typeof cat.name === 'string' ? cat.name : 'Untitled');
+                      const secondaryName = language === 'th' ? cat.name?.en : cat.name?.th;
+
+                      return (
+                        <div
+                          key={cat.id}
+                          className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden transition-all"
+                        >
+                          {/* Category Header */}
+                          <div className="p-3.5 sm:p-4 bg-gradient-to-r from-orange-50/60 via-amber-50/30 to-white border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="w-2.5 h-2.5 rounded-full bg-[#E65100]" />
+                              <h3 className="text-sm sm:text-base font-black text-[#1A1A1A]">
+                                {primaryName}
+                              </h3>
+                              {secondaryName && (
+                                <span className="text-xs text-gray-500 font-medium">
+                                  ({secondaryName})
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  cat.visible
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-gray-200 text-gray-600'
+                                }`}
+                              >
+                                {cat.visible
+                                  ? (language === 'th' ? 'แสดงในเมนู' : 'Visible')
+                                  : (language === 'th' ? 'ซ่อนไว้' : 'Hidden')}
                               </span>
-                              {item.isSignature && (
-                                <span className="bg-[#E65100] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
-                                  Signature
-                                </span>
-                              )}
-                              {item.isPopular && (
-                                <span className="bg-[#D4AF37] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
-                                  Popular
-                                </span>
-                              )}
-                              <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${
-                                item.availability === 'available' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                              }`}>
-                                {item.availability}
+                              <span className="text-xs text-gray-400 font-bold bg-white px-2 py-0.5 rounded-lg border border-gray-200 shadow-2xs">
+                                {rawCategoryItems.length} {language === 'th' ? 'รายการ' : 'dishes'}
                               </span>
                             </div>
-                            <p className="text-[11px] text-gray-500 truncate max-w-md mt-0.5">
-                              {cat?.name?.en || (typeof cat?.name === 'string' ? cat.name : 'Uncategorized')} • Base Price: <strong>{formatCurrency(item.basePrice, settings.currencySymbol)}</strong> • Modifiers: {item.modifierGroupIds?.length || 0} groups
-                            </p>
+
+                            {/* Category Controls & Add Dish to Category */}
+                            <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                              <div className="flex items-center bg-white rounded-xl border border-gray-200 p-0.5 shadow-2xs">
+                                <button
+                                  type="button"
+                                  disabled={catIdx === 0}
+                                  onClick={() => handleMoveCategory(cat.id, 'up')}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
+                                  title={language === 'th' ? 'เลื่อนหมวดหมู่ขึ้น' : 'Move category up'}
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={catIdx === categories.length - 1}
+                                  onClick={() => handleMoveCategory(cat.id, 'down')}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
+                                  title={language === 'th' ? 'เลื่อนหมวดหมู่ลง' : 'Move category down'}
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingCategory(false);
+                                  setEditingCategory({ ...cat });
+                                }}
+                                className="p-1.5 bg-white text-gray-600 hover:text-[#E65100] border border-gray-200 rounded-xl hover:bg-orange-50 shadow-2xs cursor-pointer"
+                                title={language === 'th' ? 'แก้ไขหมวดหมู่' : 'Edit category'}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(cat.id)}
+                                className="p-1.5 bg-white text-gray-400 hover:text-rose-600 border border-gray-200 rounded-xl hover:bg-rose-50 shadow-2xs cursor-pointer"
+                                title={language === 'th' ? 'ลบหมวดหมู่' : 'Delete category'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingItem(true);
+                                  setFoodImageError(null);
+                                  setShowRemoveImageConfirm(false);
+                                  setEditingItem({
+                                    id: `item_${Date.now()}`,
+                                    categoryId: cat.id,
+                                    name: { en: '', th: '' },
+                                    description: { en: '', th: '' },
+                                    imageUrl: '',
+                                    basePrice: 100,
+                                    availability: 'available',
+                                    isSignature: false,
+                                    isPopular: false,
+                                    displayOrder: rawCategoryItems.length + 1,
+                                    modifierGroupIds: [],
+                                  });
+                                }}
+                                className="px-2.5 py-1.5 bg-white border border-[#E65100]/30 hover:border-[#E65100] hover:bg-orange-50 text-[#E65100] text-xs font-bold rounded-xl transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>{language === 'th' ? 'เพิ่มเมนูในหมวดนี้' : 'Add to Category'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Dishes in this Category */}
+                          {categoryItems.length > 0 ? (
+                            <div className="divide-y divide-gray-100">
+                              {categoryItems.map((item, itemIdx) => (
+                                <div
+                                  key={item.id}
+                                  className="p-3 sm:p-3.5 flex items-center justify-between gap-3 hover:bg-gray-50/80 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    {/* Food Thumbnail */}
+                                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center text-gray-400 border border-gray-200">
+                                      {item.imageUrl ? (
+                                        <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <ImageOff className="w-5 h-5 text-gray-300" />
+                                      )}
+                                    </div>
+
+                                    {/* Food Details */}
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <h4 className="text-xs sm:text-sm font-bold text-[#1A1A1A]">
+                                          {item.name?.th || item.name?.en || (typeof item.name === 'string' ? item.name : 'Untitled')}
+                                        </h4>
+                                        {item.name?.en && item.name?.th && (
+                                          <span className="text-xs text-gray-400 font-normal">
+                                            ({language === 'th' ? item.name.en : item.name.th})
+                                          </span>
+                                        )}
+                                        {item.isSignature && (
+                                          <span className="bg-[#E65100] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                                            Signature
+                                          </span>
+                                        )}
+                                        {item.isPopular && (
+                                          <span className="bg-[#D4AF37] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                                            Popular
+                                          </span>
+                                        )}
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${
+                                            item.availability === 'available'
+                                              ? 'bg-emerald-50 text-emerald-700'
+                                              : 'bg-rose-50 text-rose-700'
+                                          }`}
+                                        >
+                                          {item.availability === 'available'
+                                            ? (language === 'th' ? 'พร้อมขาย' : 'Available')
+                                            : (language === 'th' ? 'สินค้าหมด' : 'Sold Out')}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-gray-500 truncate max-w-md mt-0.5">
+                                        {language === 'th' ? 'ราคาพื้นฐาน:' : 'Base Price:'}{' '}
+                                        <strong className="text-gray-900">
+                                          {formatCurrency(item.basePrice, settings.currencySymbol)}
+                                        </strong>
+                                        {item.modifierGroupIds && item.modifierGroupIds.length > 0 && (
+                                          <span>
+                                            {' • '}
+                                            {item.modifierGroupIds.length}{' '}
+                                            {language === 'th' ? 'กลุ่มตัวเลือกเสริม' : 'modifier groups'}
+                                          </span>
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Item Actions */}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={itemIdx === 0}
+                                      onClick={() => handleMoveMenuItemWithinCategory(item.id, 'up')}
+                                      className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
+                                      title={language === 'th' ? 'เลื่อนขึ้น' : 'Move Up'}
+                                    >
+                                      <ArrowUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={itemIdx === categoryItems.length - 1}
+                                      onClick={() => handleMoveMenuItemWithinCategory(item.id, 'down')}
+                                      className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
+                                      title={language === 'th' ? 'เลื่อนลง' : 'Move Down'}
+                                    >
+                                      <ArrowDown className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsAddingItem(false);
+                                        setFoodImageError(null);
+                                        setShowRemoveImageConfirm(false);
+                                        setEditingItem({
+                                          ...item,
+                                          name: {
+                                            en: item.name?.en || (typeof item.name === 'string' ? item.name : ''),
+                                            th: item.name?.th || '',
+                                          },
+                                          description: {
+                                            en: item.description?.en || (typeof item.description === 'string' ? item.description : ''),
+                                            th: item.description?.th || '',
+                                          },
+                                        });
+                                      }}
+                                      className="p-1.5 text-gray-600 hover:text-[#E65100] rounded-lg hover:bg-orange-50 cursor-pointer"
+                                      title={language === 'th' ? 'แก้ไขอาหาร' : 'Edit Dish'}
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMenuItem(item.id)}
+                                      className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                                      title={language === 'th' ? 'ลบอาหาร' : 'Delete Dish'}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-6 text-center text-gray-400 bg-gray-50/50">
+                              <p className="text-xs">
+                                {language === 'th'
+                                  ? 'ยังไม่มีรายการอาหารในหมวดหมู่นี้'
+                                  : 'No dishes in this category yet'}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingItem(true);
+                                  setFoodImageError(null);
+                                  setShowRemoveImageConfirm(false);
+                                  setEditingItem({
+                                    id: `item_${Date.now()}`,
+                                    categoryId: cat.id,
+                                    name: { en: '', th: '' },
+                                    description: { en: '', th: '' },
+                                    imageUrl: '',
+                                    basePrice: 100,
+                                    availability: 'available',
+                                    isSignature: false,
+                                    isPopular: false,
+                                    displayOrder: 1,
+                                    modifierGroupIds: [],
+                                  });
+                                }}
+                                className="mt-2 text-xs font-bold text-[#E65100] hover:underline cursor-pointer"
+                              >
+                                {language === 'th' ? '+ เพิ่มเมนูแรกในหมวดนี้' : '+ Add first dish to this category'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {/* Fallback for Uncategorized Items (if any exist) */}
+                  {(() => {
+                    const knownCatIds = new Set(categories.map((c) => c.id));
+                    const uncategorized = menuItems.filter(
+                      (item) => !item.categoryId || !knownCatIds.has(item.categoryId)
+                    );
+                    if (uncategorized.length === 0) return null;
+
+                    return (
+                      <div className="bg-white rounded-3xl border border-amber-200 shadow-xs overflow-hidden">
+                        <div className="p-3.5 sm:p-4 bg-amber-50/70 border-b border-amber-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                            <h3 className="text-sm font-black text-[#1A1A1A]">
+                              {language === 'th' ? 'รายการอาหารที่ยังไม่ระบุหมวดหมู่' : 'Uncategorized Items'}
+                            </h3>
+                            <span className="text-xs text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-full">
+                              {uncategorized.length}
+                            </span>
                           </div>
                         </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveMenuItem(item.id, 'up')}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100"
-                            title="Move Up"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === menuItems.length - 1}
-                            onClick={() => handleMoveMenuItem(item.id, 'down')}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100"
-                            title="Move Down"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsAddingItem(false);
-                              setFoodImageError(null);
-                              setShowRemoveImageConfirm(false);
-                              setEditingItem({
-                                ...item,
-                                name: {
-                                  en: item.name?.en || (typeof item.name === 'string' ? item.name : ''),
-                                  th: item.name?.th || ''
-                                },
-                                description: {
-                                  en: item.description?.en || (typeof item.description === 'string' ? item.description : ''),
-                                  th: item.description?.th || ''
-                                }
-                              });
-                            }}
-                            className="p-1.5 text-gray-600 hover:text-[#E65100] rounded-lg hover:bg-orange-50"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMenuItem(item.id)}
-                            className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="divide-y divide-gray-100">
+                          {uncategorized.map((item) => (
+                            <div
+                              key={item.id}
+                              className="p-3 sm:p-3.5 flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
+                                  {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <ImageOff className="w-5 h-5 text-gray-300" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-xs sm:text-sm font-bold text-[#1A1A1A]">
+                                    {item.name?.th || item.name?.en || 'Untitled'}
+                                  </h4>
+                                  <p className="text-[11px] text-gray-500">
+                                    {formatCurrency(item.basePrice, settings.currencySymbol)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddingItem(false);
+                                    setFoodImageError(null);
+                                    setShowRemoveImageConfirm(false);
+                                    setEditingItem({
+                                      ...item,
+                                      name: {
+                                        en: item.name?.en || (typeof item.name === 'string' ? item.name : ''),
+                                        th: item.name?.th || '',
+                                      },
+                                      description: {
+                                        en: item.description?.en || (typeof item.description === 'string' ? item.description : ''),
+                                        th: item.description?.th || '',
+                                      },
+                                    });
+                                  }}
+                                  className="p-1.5 text-gray-600 hover:text-[#E65100] rounded-lg hover:bg-orange-50 cursor-pointer"
+                                  title={language === 'th' ? 'แก้ไขอาหาร' : 'Edit Dish'}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMenuItem(item.id)}
+                                  className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                                  title={language === 'th' ? 'ลบอาหาร' : 'Delete Dish'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              </div>
-            )}
+                  })()}
 
-            {/* ---------------- CATEGORIES TAB ---------------- */}
-            {activeTab === 'categories' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-extrabold text-[#1A1A1A]">Category Manager</h2>
-                    <p className="text-xs text-gray-500">Manage menu categories in English and Thai.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingCategory(true);
-                      setEditingCategory({
-                        id: `cat_${Date.now()}`,
-                        name: { en: '', th: '' },
-                        displayOrder: categories.length + 1,
-                        visible: true,
-                      });
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#E65100] text-white text-xs font-extrabold hover:bg-[#D84315] transition-all flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Category</span>
-                  </button>
-                </div>
-
-                <div className="bg-white rounded-3xl border border-gray-200 shadow-xs divide-y divide-gray-100 overflow-hidden">
-                  {categories.map((cat, idx) => (
-                    <div key={cat.id} className="p-3.5 flex items-center justify-between gap-3">
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-bold text-[#1A1A1A]">
-                          {cat.name?.en || (typeof cat.name === 'string' ? cat.name : 'Untitled')} <span className="text-gray-400 font-normal">({cat.name?.th || ''})</span>
-                        </h4>
-                        <span className="text-[11px] text-gray-500">
-                          Order: {cat.displayOrder} • {cat.visible ? 'Visible' : 'Hidden'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() => handleMoveCategory(cat.id, 'up')}
-                          className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100"
-                        >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === categories.length - 1}
-                          onClick={() => handleMoveCategory(cat.id, 'down')}
-                          className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingCategory(false);
-                            setEditingCategory({ ...cat });
-                          }}
-                          className="p-1.5 text-gray-600 hover:text-[#E65100] rounded-lg hover:bg-orange-50"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCategory(cat.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  {/* Empty State if no categories at all */}
+                  {categories.length === 0 && (
+                    <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-gray-300">
+                      <UtensilsCrossed className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                      <h4 className="text-sm font-bold text-gray-800">
+                        {language === 'th' ? 'ยังไม่มีหมวดหมู่อาหาร' : 'No Categories Created Yet'}
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                        {language === 'th'
+                          ? 'เริ่มต้นสร้างหมวดหมู่อาหารแรกเพื่อเริ่มจัดระเบียบเมนูของคุณ'
+                          : 'Create your first category to start organizing your dishes.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingCategory(true);
+                          setEditingCategory({
+                            id: `cat_${Date.now()}`,
+                            name: { en: '', th: '' },
+                            displayOrder: 1,
+                            visible: true,
+                          });
+                        }}
+                        className="mt-4 px-4 py-2 rounded-xl bg-[#E65100] text-white text-xs font-bold hover:bg-[#D84315] transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>{language === 'th' ? '+ สร้างหมวดหมู่แรก' : '+ Create First Category'}</span>
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
