@@ -27,6 +27,7 @@ import {
   resetToDemoState,
   STORAGE_KEYS,
   SYNC_BROADCAST_CHANNEL,
+  TAB_ID,
 } from '../utils/storage';
 import { createAppBackup, validateBackupPayload } from '../utils/backupRestore';
 import { checkStoreAvailability, cleanExpiredHolidays } from '../utils/availabilityEngine';
@@ -289,9 +290,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     saveLanguage(newLang);
   }, []);
 
-  // Save appState to local storage fallback
+  // Save appState to local storage fallback quietly without broadcasting loops
   useEffect(() => {
-    saveAppState(appState);
+    saveAppState(appState, false);
   }, [appState]);
 
   // Real-time Firestore Orders Subscription
@@ -457,7 +458,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (JSON.stringify(prevState) === JSON.stringify(remoteState)) {
             return prevState;
           }
-          saveAppState(remoteState);
+          saveAppState(remoteState, false);
           return remoteState;
         });
       },
@@ -471,7 +472,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (e.key === STORAGE_KEYS.APP_STATE && e.newValue) {
         try {
           const fresh = loadAppState();
-          setAppState(fresh);
+          setAppState(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(fresh)) return prev;
+            return fresh;
+          });
         } catch (err) {
           console.error('Failed to sync app state from storage event:', err);
         }
@@ -486,9 +490,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         broadcastChannel = new BroadcastChannel(SYNC_BROADCAST_CHANNEL);
         broadcastChannel.onmessage = (event) => {
+          // CRITICAL: Ignore broadcasts that originated from this exact same tab to prevent infinite loop
+          if (event.data?.senderId === TAB_ID) return;
           if (event.data?.type === 'APP_STATE_UPDATED') {
             const fresh = loadAppState();
-            setAppState(fresh);
+            setAppState(prev => {
+              if (JSON.stringify(prev) === JSON.stringify(fresh)) return prev;
+              return fresh;
+            });
           }
         };
       } catch (err) {

@@ -15,11 +15,19 @@ export const STORAGE_KEYS = {
 
 export const SYNC_BROADCAST_CHANNEL = 'tonys_kitchen_shared_sync_channel';
 
-export function broadcastStateChange(type: 'APP_STATE_UPDATED' | 'CART_UPDATED' = 'APP_STATE_UPDATED'): void {
+// Unique session ID for this browser tab to filter out loopback broadcast echoes
+export const TAB_ID = typeof window !== 'undefined'
+  ? ((window as any).__TK_TAB_ID__ || ((window as any).__TK_TAB_ID__ = Math.random().toString(36).slice(2)))
+  : 'server';
+
+export function broadcastStateChange(
+  type: 'APP_STATE_UPDATED' | 'CART_UPDATED' = 'APP_STATE_UPDATED',
+  senderId: string = TAB_ID
+): void {
   try {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       const channel = new BroadcastChannel(SYNC_BROADCAST_CHANNEL);
-      channel.postMessage({ type, timestamp: Date.now() });
+      channel.postMessage({ type, senderId, timestamp: Date.now() });
       channel.close();
     }
   } catch (error) {
@@ -115,10 +123,12 @@ export function loadAppState(): AppStateData {
   }
 }
 
-export function saveAppState(state: AppStateData): void {
+export function saveAppState(state: AppStateData, shouldBroadcast: boolean = true): void {
   try {
     localStorage.setItem(STORAGE_KEYS.APP_STATE, JSON.stringify(state));
-    broadcastStateChange('APP_STATE_UPDATED');
+    if (shouldBroadcast) {
+      broadcastStateChange('APP_STATE_UPDATED');
+    }
   } catch (error) {
     console.error('Failed to save app state to localStorage:', error);
   }

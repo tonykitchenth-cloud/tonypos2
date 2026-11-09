@@ -529,21 +529,26 @@ export const OwnerDashboard: React.FC = () => {
     setMenuItems(prev => {
       const item = prev.find(i => i.id === itemId);
       if (!item) return prev;
-      const categoryItems = prev.filter(i => i.categoryId === item.categoryId).sort((a, b) => a.displayOrder - b.displayOrder);
+      const categoryItems = prev
+        .filter(i => i.categoryId === item.categoryId)
+        .sort((a, b) => a.displayOrder - b.displayOrder);
       const catIndex = categoryItems.findIndex(i => i.id === itemId);
       const targetCatIndex = direction === 'up' ? catIndex - 1 : catIndex + 1;
       if (targetCatIndex < 0 || targetCatIndex >= categoryItems.length) return prev;
 
       const targetItem = categoryItems[targetCatIndex];
-      const globalIndex = prev.findIndex(i => i.id === itemId);
-      const globalTargetIndex = prev.findIndex(i => i.id === targetItem.id);
+      const currentOrder = item.displayOrder;
+      const targetOrder = targetItem.displayOrder;
 
-      const newItems = [...prev];
-      const temp = newItems[globalIndex];
-      newItems[globalIndex] = newItems[globalTargetIndex];
-      newItems[globalTargetIndex] = temp;
-
-      return newItems.map((it, idx) => ({ ...it, displayOrder: idx + 1 }));
+      return prev.map(it => {
+        if (it.id === itemId) {
+          return { ...it, displayOrder: targetOrder };
+        }
+        if (it.id === targetItem.id) {
+          return { ...it, displayOrder: currentOrder };
+        }
+        return it;
+      });
     });
   };
 
@@ -576,17 +581,26 @@ export const OwnerDashboard: React.FC = () => {
 
   const handleMoveCategory = (catId: string, direction: 'up' | 'down') => {
     setCategories(prev => {
-      const index = prev.findIndex(c => c.id === catId);
+      const sorted = [...prev].sort((a, b) => a.displayOrder - b.displayOrder);
+      const index = sorted.findIndex(c => c.id === catId);
       if (index < 0) return prev;
       const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      if (targetIndex < 0 || targetIndex >= sorted.length) return prev;
 
-      const newCats = [...prev];
-      const temp = newCats[index];
-      newCats[index] = newCats[targetIndex];
-      newCats[targetIndex] = temp;
+      const currentCat = sorted[index];
+      const targetCat = sorted[targetIndex];
+      const currentOrder = currentCat.displayOrder;
+      const targetOrder = targetCat.displayOrder;
 
-      return newCats.map((cat, idx) => ({ ...cat, displayOrder: idx + 1 }));
+      return prev.map(c => {
+        if (c.id === currentCat.id) {
+          return { ...c, displayOrder: targetOrder };
+        }
+        if (c.id === targetCat.id) {
+          return { ...c, displayOrder: currentOrder };
+        }
+        return c;
+      });
     });
   };
 
@@ -881,7 +895,9 @@ export const OwnerDashboard: React.FC = () => {
                       className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                         isSelected
                           ? 'bg-white text-[#E65100]'
-                          : 'bg-red-500 text-white animate-bounce'
+                          : tab.id === 'orders'
+                          ? 'bg-red-500 text-white animate-bounce'
+                          : 'bg-gray-100 text-gray-700'
                       }`}
                     >
                       {badge}
@@ -1258,9 +1274,13 @@ export const OwnerDashboard: React.FC = () => {
                 {/* Categories & Dishes Grouped List */}
                 <div className="space-y-5">
                   {categories
+                    .slice()
+                    .sort((a, b) => a.displayOrder - b.displayOrder)
                     .filter((cat) => selectedCategoryFilter === 'all' || selectedCategoryFilter === cat.id)
-                    .map((cat, catIdx) => {
-                      const rawCategoryItems = menuItems.filter((item) => item.categoryId === cat.id);
+                    .map((cat, catIdx, filteredCats) => {
+                      const rawCategoryItems = menuItems
+                        .filter((item) => item.categoryId === cat.id)
+                        .sort((a, b) => a.displayOrder - b.displayOrder);
                       // Filter by search query if any
                       const q = menuSearchQuery.trim().toLowerCase();
                       const categoryItems = rawCategoryItems.filter((item) => {
@@ -1283,7 +1303,7 @@ export const OwnerDashboard: React.FC = () => {
                       return (
                         <div
                           key={cat.id}
-                          className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden transition-all"
+                          className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden"
                         >
                           {/* Category Header */}
                           <div className="p-3.5 sm:p-4 bg-gradient-to-r from-orange-50/60 via-amber-50/30 to-white border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1319,7 +1339,10 @@ export const OwnerDashboard: React.FC = () => {
                                 <button
                                   type="button"
                                   disabled={catIdx === 0}
-                                  onClick={() => handleMoveCategory(cat.id, 'up')}
+                                  onClick={(e) => {
+                                    e.currentTarget.blur();
+                                    handleMoveCategory(cat.id, 'up');
+                                  }}
                                   className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
                                   title={language === 'th' ? 'เลื่อนหมวดหมู่ขึ้น' : 'Move category up'}
                                 >
@@ -1327,8 +1350,11 @@ export const OwnerDashboard: React.FC = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={catIdx === categories.length - 1}
-                                  onClick={() => handleMoveCategory(cat.id, 'down')}
+                                  disabled={catIdx === filteredCats.length - 1}
+                                  onClick={(e) => {
+                                    e.currentTarget.blur();
+                                    handleMoveCategory(cat.id, 'down');
+                                  }}
                                   className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
                                   title={language === 'th' ? 'เลื่อนหมวดหมู่ลง' : 'Move category down'}
                                 >
@@ -1456,7 +1482,10 @@ export const OwnerDashboard: React.FC = () => {
                                     <button
                                       type="button"
                                       disabled={itemIdx === 0}
-                                      onClick={() => handleMoveMenuItemWithinCategory(item.id, 'up')}
+                                      onClick={(e) => {
+                                        e.currentTarget.blur();
+                                        handleMoveMenuItemWithinCategory(item.id, 'up');
+                                      }}
                                       className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
                                       title={language === 'th' ? 'เลื่อนขึ้น' : 'Move Up'}
                                     >
@@ -1465,7 +1494,10 @@ export const OwnerDashboard: React.FC = () => {
                                     <button
                                       type="button"
                                       disabled={itemIdx === categoryItems.length - 1}
-                                      onClick={() => handleMoveMenuItemWithinCategory(item.id, 'down')}
+                                      onClick={(e) => {
+                                        e.currentTarget.blur();
+                                        handleMoveMenuItemWithinCategory(item.id, 'down');
+                                      }}
                                       className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded-lg hover:bg-gray-100 cursor-pointer"
                                       title={language === 'th' ? 'เลื่อนลง' : 'Move Down'}
                                     >
