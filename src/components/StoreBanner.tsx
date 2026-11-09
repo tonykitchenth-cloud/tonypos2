@@ -10,11 +10,11 @@ export const StoreBanner: React.FC = () => {
   const currentReason = language === 'th' ? storeAvailability.reasonTh : storeAvailability.reasonEn;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pt-3 pb-1">
-      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-gray-100/80 shadow-xs">
+    <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-2 sm:pt-3 pb-1 overflow-hidden">
+      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-gray-100/80 shadow-xs">
         {/* Top Line: Status Badge + Hours Summary */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-gray-100">
-          <div className="flex items-start sm:items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-2.5 pb-2.5 sm:pb-3 border-b border-gray-100">
+          <div className="flex items-start sm:items-center gap-2 sm:gap-2.5">
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${
                 isOpen
@@ -32,7 +32,7 @@ export const StoreBanner: React.FC = () => {
 
             <div>
               <div className="text-xs text-gray-700 font-bold flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 <span>{t('operatingHours')}</span>
               </div>
               <div className="text-[11px] text-[#DC2626] font-bold pl-4.5 flex items-center gap-1">
@@ -57,7 +57,7 @@ export const StoreBanner: React.FC = () => {
 
         {/* Bottom Line: Direct Contact Links */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-gray-600">
-          <div className="flex flex-wrap items-center gap-3.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3.5">
             {/* Phone */}
             <a
               href={`tel:${settings.phone}`}

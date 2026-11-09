@@ -23,10 +23,12 @@ import { POSPrinterModal } from './POSPrinterModal';
 import { OwnerPOSInstallButton } from './OwnerPOSInstallButton';
 import { orderNotificationService } from '../../services/orderNotificationService';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
-import { navigateTo, getLogoUrl } from '../../utils/navigation';
+import { navigateTo, getLogoUrl, getOwnerShareUrl } from '../../utils/navigation';
 import {
   X,
   LogOut,
+  Link2,
+  Copy,
   LayoutDashboard,
   UtensilsCrossed,
   Tags,
@@ -538,6 +540,34 @@ export const OwnerDashboard: React.FC = () => {
 
           <button
             type="button"
+            id="copy-owner-link-btn"
+            onClick={async () => {
+              const url = getOwnerShareUrl();
+              try {
+                await navigator.clipboard.writeText(url);
+                showToast(
+                  language === 'th'
+                    ? '📋 คัดลอกลิงก์ตรงสำหรับเจ้าของร้านแล้ว! (บุ๊กมาร์กเก็บไว้เข้าใช้งานได้โดยตรง)'
+                    : '📋 Direct Owner Portal link copied to clipboard!'
+                );
+              } catch {
+                prompt(
+                  language === 'th'
+                    ? 'ลิงก์เข้าสู่ระบบเฉพาะเจ้าของร้าน (คัดลอกเก็บไว้):'
+                    : 'Direct Owner Portal Link:',
+                  url
+                );
+              }
+            }}
+            className="px-3 py-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+            title={language === 'th' ? 'คัดลอกลิงก์ตรงสำหรับเจ้าของร้าน' : 'Copy Direct Owner Portal Link'}
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{language === 'th' ? 'ลิงก์เจ้าของร้าน' : 'Owner Link'}</span>
+          </button>
+
+          <button
+            type="button"
             id="exit-owner-mode-btn"
             onClick={() => {
               setIsOwnerMode(false);
@@ -668,6 +698,63 @@ export const OwnerDashboard: React.FC = () => {
                           : 'Set Emergency Close'}
                       </span>
                     </button>
+                  </div>
+                </div>
+
+                {/* 🔒 Isolated Owner Link Card */}
+                <div className="bg-gradient-to-br from-neutral-900 to-neutral-950 text-white rounded-3xl p-5 border border-amber-500/30 shadow-lg space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                        <Link2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-black text-white">
+                            {language === 'th' ? '🔒 ลิงก์ตรงเฉพาะเข้าใช้งานเจ้าของร้าน (แยกอิสระจากลูกค้า)' : '🔒 Dedicated Owner Portal Link'}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                            {language === 'th' ? 'ปลอดภัย 100%' : 'Customer-Safe'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-neutral-300 mt-0.5">
+                          {language === 'th'
+                            ? 'หน้าลูกค้าไม่มีปุ่มหรือการกดซ่อนใดๆ เพื่อเข้าหน้านี้ ป้องกันลูกค้ากดเล่นหรือแก้ไขข้อมูลโดยไม่ตั้งใจ'
+                            : 'The customer ordering view has zero links or hidden gestures to this portal.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const url = getOwnerShareUrl();
+                        try {
+                          await navigator.clipboard.writeText(url);
+                          showToast(
+                            language === 'th'
+                              ? '📋 คัดลอกลิงก์ตรงสำหรับเจ้าของร้านเรียบร้อยแล้ว!'
+                              : '📋 Direct Owner Portal link copied to clipboard!'
+                          );
+                        } catch {
+                          prompt(
+                            language === 'th' ? 'ลิงก์เข้าสู่ระบบเฉพาะเจ้าของร้าน:' : 'Direct Owner Portal Link:',
+                            url
+                          );
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl bg-[#E65100] hover:bg-[#D84315] text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md cursor-pointer shrink-0"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span>{language === 'th' ? 'คัดลอกลิงก์เจ้าของร้าน' : 'Copy Owner Link'}</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-neutral-800/80 rounded-xl px-3 py-2 border border-neutral-700/60 flex items-center justify-between gap-2 overflow-hidden text-xs font-mono text-amber-300 select-all">
+                    <span className="truncate">{typeof window !== 'undefined' ? getOwnerShareUrl() : '/owner'}</span>
+                    <span className="text-[10px] text-neutral-400 font-sans shrink-0">
+                      {language === 'th' ? 'บุ๊กมาร์กเก็บไว้' : 'Bookmark this'}
+                    </span>
                   </div>
                 </div>
 

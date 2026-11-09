@@ -127,7 +127,7 @@ export const CustomerOrderStatusModal: React.FC<CustomerOrderStatusModalProps> =
   return (
     <div
       id="customer-order-status-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
       onClick={handleClose}
     >
       <div

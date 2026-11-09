@@ -82,12 +82,12 @@ export const MenuFeed: React.FC = () => {
         key={item.id}
         id={`dish-card-${item.id}`}
         onClick={() => isAvailable && handleSelectItem(item)}
-        className={`group bg-white rounded-2xl p-3 border border-gray-100/90 shadow-2xs transition-all duration-200 flex items-center gap-3.5 relative overflow-hidden ${
+        className={`group bg-white rounded-2xl p-2.5 sm:p-3 border border-gray-100/90 shadow-2xs transition-all duration-200 flex items-center gap-2.5 sm:gap-3.5 relative overflow-hidden ${
           isAvailable ? 'cursor-pointer hover:border-[#E65100]/30 hover:shadow-xs' : 'opacity-70 bg-gray-50/70'
         }`}
       >
         {/* Compact Food Image */}
-        <div className="relative w-22 h-22 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
           <div className="absolute inset-0 flex items-center justify-center text-gray-300">
             <ImageOff className="w-6 h-6" />
           </div>
@@ -188,7 +188,7 @@ export const MenuFeed: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-4 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6 overflow-hidden">
       {isGroupingByCategory ? (
         // Grouped by Category with Section Headers
         categories

@@ -57,7 +57,7 @@ export const ActiveOrderFloatingBanner: React.FC<ActiveOrderFloatingBannerProps>
     <div
       id="active-order-floating-banner"
       onClick={() => onOpenStatus(order.id)}
-      className={`fixed bottom-20 sm:bottom-6 left-4 right-4 max-w-md mx-auto z-40 rounded-2xl p-3 sm:p-3.5 shadow-2xl backdrop-blur-md cursor-pointer transition-all transform hover:-translate-y-0.5 group animate-slide-up border ${
+      className={`fixed bottom-20 sm:bottom-6 left-3 right-3 sm:left-4 sm:right-4 max-w-md mx-auto z-40 rounded-2xl p-3 sm:p-3.5 shadow-2xl backdrop-blur-md cursor-pointer transition-all transform hover:-translate-y-0.5 group animate-slide-up border overflow-hidden ${
         isCompleted
           ? 'bg-neutral-950/95 border-emerald-500/60 hover:border-emerald-400 shadow-emerald-500/20'
           : 'bg-neutral-900/95 border-orange-500/40 hover:border-orange-500 shadow-orange-500/10'

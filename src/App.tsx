@@ -62,11 +62,11 @@ const MainCustomerView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] flex flex-col selection:bg-[#E65100]/20 selection:text-[#E65100] pb-24">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F8F9FA] text-[#1A1A1A] flex flex-col selection:bg-[#E65100]/20 selection:text-[#E65100] pb-24">
       {/* 0. Offline Network Indicator */}
       <OfflineNotice />
 
-      {/* 1. Header (Logo 5-tap trigger, Brand, Language Switcher, Profile, Fav, Cart) */}
+      {/* 1. Header (Logo & Brand, Language Switcher, Profile, Order History, Fav, Cart) */}
       <Header />
 
       {/* PWA Discreet Add to Home Screen Banner (suppressed during checkout/ordering modals) */}
@@ -82,7 +82,7 @@ const MainCustomerView: React.FC = () => {
       <CategoryNav />
 
       {/* 5. Customer Homepage Menu Feed (COMPACT, STRICTLY NO PRICE ON HOMEPAGE CARDS) */}
-      <main className="flex-1">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden">
         <MenuFeed />
       </main>
 
@@ -97,7 +97,7 @@ const MainCustomerView: React.FC = () => {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-            className="fixed bottom-4 inset-x-4 max-w-md mx-auto z-30"
+            className="fixed bottom-4 inset-x-3 sm:inset-x-4 max-w-md mx-auto z-30"
           >
             <button
               type="button"

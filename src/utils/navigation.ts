@@ -35,10 +35,14 @@ export function getAppRoute(): AppRoute {
     return 'rider';
   }
 
-  // 3. Owner Dashboard Route Match (e.g. ?/owner or ?owner)
+  // 3. Owner Dashboard Route Match (e.g. ?view=owner, ?owner, /owner, ?admin, etc.)
   if (
     search.startsWith('?/owner') ||
     search.startsWith('?owner') ||
+    search.includes('view=owner') ||
+    search.includes('route=owner') ||
+    search.includes('portal=owner') ||
+    search.includes('admin') ||
     search.includes('/owner')
   ) {
     return 'owner';
@@ -107,6 +111,17 @@ export function getRiderShareUrl(): string {
   const origin = window.location.origin;
   const basePath = getBaseAppPath();
   return `${origin}${basePath}?view=rider`;
+}
+
+/**
+ * Returns a universal, direct shareable URL for the restaurant owner portal
+ * that works seamlessly on GitHub Pages, custom domains, and local preview.
+ */
+export function getOwnerShareUrl(): string {
+  if (typeof window === 'undefined') return '/owner';
+  const origin = window.location.origin;
+  const basePath = getBaseAppPath();
+  return `${origin}${basePath}?view=owner`;
 }
 
 /**

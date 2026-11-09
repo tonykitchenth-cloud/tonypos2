@@ -44,7 +44,7 @@ export const SearchBar: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pt-3 pb-1">
+    <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-2 sm:pt-3 pb-1 overflow-hidden">
       <div className="relative flex items-center">
         <Search className="absolute left-3.5 w-4 h-4 text-gray-400 pointer-events-none" />
         <input

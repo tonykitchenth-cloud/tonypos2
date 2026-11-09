@@ -100,7 +100,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   return (
     <div
       id="order-confirmation-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
     >
       <div
         className="bg-neutral-900 border border-neutral-800 text-white rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up"
