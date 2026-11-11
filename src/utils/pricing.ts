@@ -1,11 +1,15 @@
 import { CartItem, SelectedModifier } from '../types';
 
 /**
- * Calculates the unit price for a menu item given its base price and selected modifiers.
+ * Calculates the unit price for a menu item given its base price, selected modifiers, and optional main option adjustment.
  */
-export function calculateItemUnitPrice(basePrice: number, selectedModifiers: SelectedModifier[]): number {
-  const modifiersTotal = selectedModifiers.reduce((sum, mod) => sum + (mod.priceAdjustment || 0), 0);
-  return Math.max(0, basePrice + modifiersTotal);
+export function calculateItemUnitPrice(
+  basePrice: number,
+  selectedModifiers: SelectedModifier[],
+  mainOptionPriceAdjustment: number = 0
+): number {
+  const modifiersTotal = (selectedModifiers || []).reduce((sum, mod) => sum + (mod.priceAdjustment || 0), 0);
+  return Math.max(0, basePrice + modifiersTotal + (mainOptionPriceAdjustment || 0));
 }
 
 /**

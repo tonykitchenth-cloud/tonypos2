@@ -230,6 +230,25 @@ export const CartDrawer: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Selected Main Option (ตัวเลือกหลัก) */}
+                    {item.selectedMainOption && (
+                      <div className="bg-orange-50/70 border border-orange-200/60 rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[11px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="bg-[#E65100] text-white font-black text-[9px] px-1.5 py-0.2 rounded shrink-0">
+                            {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}
+                          </span>
+                          <span className="font-bold text-gray-800 truncate">
+                            {item.selectedMainOption.name[language] || item.selectedMainOption.name.th || item.selectedMainOption.name.en}
+                          </span>
+                        </div>
+                        {item.selectedMainOption.priceAdjustment > 0 && (
+                          <span className="font-bold text-[#E65100] shrink-0">
+                            +{formatCurrency(item.selectedMainOption.priceAdjustment, settings.currencySymbol)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Selected Modifiers breakdown */}
                     {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                       <div className="bg-gray-50 rounded-xl p-2 text-[11px] text-gray-600 space-y-1">

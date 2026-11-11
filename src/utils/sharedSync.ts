@@ -12,6 +12,7 @@ import { defaultAppState } from './storage';
 import { cleanExpiredHolidays } from './availabilityEngine';
 import { defaultSettings } from '../data/defaultSettings';
 import { demoCategories, demoMenuItems, demoModifierGroups } from '../data/demoData';
+import { getDefaultMainOptions } from './menuHelpers';
 
 export const RESTAURANT_COLLECTION = 'restaurants';
 
@@ -116,9 +117,15 @@ export function sanitizeAppState(data: any): AppStateData {
     categories: Array.isArray(data.categories) && data.categories.length > 0
       ? data.categories
       : demoCategories,
-    menuItems: Array.isArray(data.menuItems) && data.menuItems.length > 0
+    menuItems: (Array.isArray(data.menuItems) && data.menuItems.length > 0
       ? data.menuItems
-      : demoMenuItems,
+      : demoMenuItems
+    ).map(item => ({
+      ...item,
+      mainOptions: (Array.isArray(item.mainOptions) && item.mainOptions.length > 0)
+        ? item.mainOptions
+        : getDefaultMainOptions(item),
+    })),
     modifierGroups: Array.isArray(data.modifierGroups) && data.modifierGroups.length > 0
       ? data.modifierGroups
       : demoModifierGroups,

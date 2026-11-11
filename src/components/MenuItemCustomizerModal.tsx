@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { CartItem, MenuItem, ModifierGroup, ModifierOption, SelectedModifier } from '../types';
+import { CartItem, MenuItem, ModifierGroup, ModifierOption, SelectedModifier, MainOption, SelectedMainOption } from '../types';
 import { calculateItemUnitPrice, calculateLineSubtotal, formatCurrency } from '../utils/pricing';
 import { isModifierOptionAvailable } from '../utils/availabilityEngine';
-import { X, Plus, Minus, Check, AlertCircle, ShoppingBag } from 'lucide-react';
+import { getDefaultMainOptions } from '../utils/menuHelpers';
+import { X, Plus, Minus, Check, AlertCircle, ShoppingBag, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const MenuItemCustomizerModal: React.FC = () => {
@@ -27,13 +28,23 @@ export const MenuItemCustomizerModal: React.FC = () => {
   const isEditing = Boolean(editingCartItem);
 
   const [quantity, setQuantity] = useState<number>(1);
+  const [selectedMainOptionId, setSelectedMainOptionId] = useState<string>('');
   const [selectedModifiersMap, setSelectedModifiersMap] = useState<Record<string, string[]>>({});
   const [specialRequest, setSpecialRequest] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const lastTargetKeyRef = useRef<string | null>(null);
 
-  // Attached modifier groups for this specific dish
+  // Main options for this dish (every dish has main options)
+  const mainOptions: MainOption[] = useMemo(() => {
+    if (!activeItem) return [];
+    const opts = (activeItem.mainOptions && activeItem.mainOptions.length > 0)
+      ? activeItem.mainOptions
+      : getDefaultMainOptions(activeItem);
+    return [...opts].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+  }, [activeItem]);
+
+  // Attached sub-modifier groups for this specific dish
   const attachedGroups: ModifierGroup[] = useMemo(() => {
     if (!activeItem) return [];
     return (activeItem.modifierGroupIds || [])
@@ -64,6 +75,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
       // Hydrate from existing cart line item
       setQuantity(editingCartItem.quantity || 1);
       setSpecialRequest(editingCartItem.specialRequest || '');
+      setSelectedMainOptionId(editingCartItem.selectedMainOption?.id || mainOptions[0]?.id || '');
 
       const initialMap: Record<string, string[]> = {};
       editingCartItem.selectedModifiers.forEach(m => {
@@ -74,11 +86,13 @@ export const MenuItemCustomizerModal: React.FC = () => {
       });
       setSelectedModifiersMap(initialMap);
     } else {
-      // Fresh customization: auto-select default 1st available option for required single-select groups
+      // Fresh customization: auto-select 1st available main option
       setQuantity(1);
       setSpecialRequest('');
-      const defaultMap: Record<string, string[]> = {};
+      const firstAvailMain = mainOptions.find(o => o.availability !== 'out_today' && o.availability !== 'out_indefinitely') || mainOptions[0];
+      setSelectedMainOptionId(firstAvailMain?.id || '');
 
+      const defaultMap: Record<string, string[]> = {};
       attachedGroups.forEach(group => {
         if (group.required && group.maxSelections === 1) {
           const firstAvail = group.options
@@ -92,7 +106,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
       setSelectedModifiersMap(defaultMap);
     }
     setValidationError(null);
-  }, [activeItem, editingCartItem, attachedGroups]);
+  }, [activeItem, editingCartItem, attachedGroups, mainOptions]);
 
   if (!activeItem) return null;
 
@@ -152,7 +166,10 @@ export const MenuItemCustomizerModal: React.FC = () => {
     });
   });
 
-  const unitPrice = calculateItemUnitPrice(activeItem.basePrice, compiledModifiers);
+  const selectedMainOption = mainOptions.find(o => o.id === selectedMainOptionId) || mainOptions[0];
+  const mainOptPrice = selectedMainOption?.priceAdjustment || 0;
+
+  const unitPrice = calculateItemUnitPrice(activeItem.basePrice, compiledModifiers, mainOptPrice);
   const subtotal = calculateLineSubtotal(unitPrice, quantity);
 
   const handleClose = () => {
@@ -168,7 +185,15 @@ export const MenuItemCustomizerModal: React.FC = () => {
       return;
     }
 
-    // 2. Validate all attached groups
+    // 2. Validate Main Option selection
+    if (mainOptions.length > 0 && !selectedMainOption) {
+      setValidationError(
+        language === 'th' ? 'กรุณาเลือกตัวเลือกหลัก' : 'Please select a main option.'
+      );
+      return;
+    }
+
+    // 3. Validate all attached groups
     for (const group of attachedGroups) {
       const selected = selectedModifiersMap[group.id] || [];
       const groupName = group.name?.[language] || group.name?.en || (typeof group.name === 'string' ? group.name : 'Modifier');
@@ -198,6 +223,13 @@ export const MenuItemCustomizerModal: React.FC = () => {
       imageUrl: activeItem.imageUrl,
       basePrice: activeItem.basePrice,
       quantity,
+      selectedMainOption: selectedMainOption
+        ? {
+            id: selectedMainOption.id,
+            name: selectedMainOption.name,
+            priceAdjustment: selectedMainOption.priceAdjustment || 0,
+          }
+        : undefined,
       selectedModifiers: compiledModifiers,
       specialRequest: specialRequest.trim(),
       unitPrice,
@@ -244,7 +276,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
           </div>
 
           {/* Scrollable Customization Body */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {/* Dish Overview Card */}
             <div className="flex gap-3.5 bg-gray-50/70 p-3 rounded-2xl border border-gray-100">
               {activeItem.imageUrl && (
@@ -272,6 +304,98 @@ export const MenuItemCustomizerModal: React.FC = () => {
               <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-semibold">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                 <span>{validationError}</span>
+              </div>
+            )}
+
+            {/* ---------------- 1. ตัวเลือกหลัก (MAIN OPTIONS - FIRST) ---------------- */}
+            {mainOptions.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 border-2 border-orange-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-[#1A1A1A] flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#E65100]" />
+                      <span>{language === 'th' ? 'ตัวเลือกหลัก (Main Option)' : 'Main Option'}</span>
+                    </h4>
+                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                      {language === 'th' ? 'เลือก 1 ตัวเลือกตามต้องการ' : 'Select 1 option (Required)'}
+                    </p>
+                  </div>
+
+                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-orange-50 text-[#E65100] border border-orange-200">
+                    {t('requiredBadge')}
+                  </span>
+                </div>
+
+                {/* Options List */}
+                <div className="space-y-1.5 pt-1">
+                  {mainOptions.map((opt) => {
+                    const isSelected = (selectedMainOption?.id === opt.id);
+                    const isAvail = opt.availability !== 'out_today' && opt.availability !== 'out_indefinitely';
+                    const optName = opt.name?.[language] || opt.name?.th || opt.name?.en || 'Option';
+                    const priceDelta = opt.priceAdjustment || 0;
+
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all select-none ${
+                          !isAvail
+                            ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+                            : isSelected
+                            ? 'bg-orange-50/70 border-[#E65100] shadow-xs cursor-pointer ring-1 ring-[#E65100]'
+                            : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50/50 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name={`main-option-${activeItem.id}`}
+                            value={opt.id}
+                            checked={isSelected}
+                            disabled={!isAvail}
+                            onChange={() => {
+                              if (isAvail) {
+                                setSelectedMainOptionId(opt.id);
+                                setValidationError(null);
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <div
+                            className={`w-4.5 h-4.5 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+                              isSelected
+                                ? 'bg-[#E65100] border-2 border-[#E65100] text-white'
+                                : 'border border-gray-300 bg-white'
+                            }`}
+                          >
+                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <span className={`text-xs font-bold ${isSelected ? 'text-[#1A1A1A]' : 'text-gray-700'}`}>
+                            {optName}
+                          </span>
+                        </div>
+
+                        <div className="shrink-0 font-bold text-xs">
+                          {priceDelta > 0 ? (
+                            <span className="text-[#E65100]">+{formatCurrency(priceDelta, settings.currencySymbol)}</span>
+                          ) : (
+                            <span className="text-gray-400 font-normal">{language === 'th' ? 'ไม่มีบวกเพิ่ม' : 'Included'}</span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Divider before Sub-options / Modifiers */}
+            {attachedGroups.length > 0 && (
+              <div className="pt-2 flex items-center gap-2">
+                <span className="h-px bg-gray-200 flex-1" />
+                <span className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
+                  {language === 'th' ? 'เมนูย่อย / ตัวเลือกเสริม (Sub-options)' : 'Sub-options & Add-ons'}
+                </span>
+                <span className="h-px bg-gray-200 flex-1" />
               </div>
             )}
 

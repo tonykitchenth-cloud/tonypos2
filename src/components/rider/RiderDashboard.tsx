@@ -403,6 +403,11 @@ export const RiderDashboard: React.FC = () => {
                                 <span className="font-bold text-white">
                                   {language === 'th' ? (item.name.th || item.name.en) : item.name.en}
                                 </span>
+                                {item.selectedMainOption && (
+                                  <span className="text-[11px] text-orange-400 font-bold block">
+                                    • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
+                                  </span>
+                                )}
                                 {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                                   <span className="text-[11px] text-neutral-400 block">
                                     + {item.selectedModifiers.map((m) => language === 'th' ? m.optionName.th : m.optionName.en).join(', ')}

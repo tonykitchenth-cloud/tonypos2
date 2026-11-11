@@ -33,6 +33,18 @@ export interface ModifierGroup {
   options: ModifierOption[];
 }
 
+export interface MainOption {
+  id: string;
+  name: {
+    en: string;
+    th: string;
+  };
+  priceAdjustment: number; // e.g. 0, 20, 40
+  availability?: AvailabilityStatus;
+  outUntilDate?: string;
+  displayOrder: number;
+}
+
 export interface MenuItem {
   id: string;
   categoryId: string;
@@ -51,7 +63,8 @@ export interface MenuItem {
   isSignature?: boolean;
   isPopular?: boolean;
   displayOrder: number;
-  modifierGroupIds: string[]; // IDs of ModifierGroups attached to this dish
+  mainOptions?: MainOption[]; // Primary/Main options for this dish
+  modifierGroupIds: string[]; // IDs of ModifierGroups (sub-options) attached to this dish
 }
 
 export interface Category {
@@ -78,6 +91,15 @@ export interface SelectedModifier {
   priceAdjustment: number;
 }
 
+export interface SelectedMainOption {
+  id: string;
+  name: {
+    en: string;
+    th: string;
+  };
+  priceAdjustment: number;
+}
+
 export interface CartItem {
   id: string; // Unique cart line ID (UUID / timestamp-based)
   menuItemId: string;
@@ -88,9 +110,10 @@ export interface CartItem {
   imageUrl: string;
   basePrice: number;
   quantity: number;
+  selectedMainOption?: SelectedMainOption;
   selectedModifiers: SelectedModifier[];
   specialRequest?: string;
-  unitPrice: number; // basePrice + sum of modifier adjustments
+  unitPrice: number; // basePrice + mainOption + sum of modifier adjustments
   subtotal: number;  // unitPrice * quantity
 }
 
@@ -124,6 +147,7 @@ export interface OrderItemSnapshot {
   basePrice: number;
   unitPrice: number;
   quantity: number;
+  selectedMainOption?: SelectedMainOption;
   subtotal: number;
   selectedModifiers: OrderItemModifier[];
   specialRequest?: string;

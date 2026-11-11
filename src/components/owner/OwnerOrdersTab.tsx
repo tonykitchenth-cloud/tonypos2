@@ -1195,6 +1195,11 @@ export const OwnerOrdersTab: React.FC = () => {
                           <span className="text-orange-400 mr-2">{item.quantity}×</span>
                           {item.name?.[language] || item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}
                         </div>
+                        {item.selectedMainOption && (
+                          <div className="text-[11px] text-orange-400 font-bold pl-4 mt-1">
+                            • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {item.selectedMainOption.name?.[language] || item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}
+                          </div>
+                        )}
                         {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                           <div className="text-[11px] text-neutral-400 pl-4 mt-1 space-y-0.5">
                             {item.selectedModifiers.map((m, mIdx) => (
@@ -1515,6 +1520,9 @@ export const OwnerOrdersTab: React.FC = () => {
               <div key={idx} className="flex justify-between text-xs">
                 <div>
                   <p><strong>{item.quantity}x {item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}</strong></p>
+                  {item.selectedMainOption && (
+                    <p className="pl-2 font-bold text-orange-700">• Main: {item.selectedMainOption.name?.en || item.selectedMainOption.name?.th}</p>
+                  )}
                   {item.selectedModifiers?.map((m, mIdx) => (
                     <p key={mIdx} className="pl-2">+ {m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '')}</p>
                   ))}

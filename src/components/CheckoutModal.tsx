@@ -228,6 +228,7 @@ export const CheckoutModal: React.FC = () => {
       basePrice: item.basePrice,
       unitPrice: item.unitPrice,
       quantity: item.quantity,
+      selectedMainOption: item.selectedMainOption,
       subtotal: item.subtotal,
       selectedModifiers: item.selectedModifiers.map((mod) => ({
         groupId: mod.groupId,
@@ -335,6 +336,7 @@ export const CheckoutModal: React.FC = () => {
           basePrice: item.basePrice,
           unitPrice: item.unitPrice,
           quantity: item.quantity,
+          selectedMainOption: item.selectedMainOption,
           subtotal: item.subtotal,
           selectedModifiers: item.selectedModifiers.map((mod) => ({
             groupId: mod.groupId,

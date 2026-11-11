@@ -75,6 +75,19 @@ export function createAppBackup(
         isSignature: Boolean(m.isSignature),
         isPopular: Boolean(m.isPopular),
         displayOrder: Number(m.displayOrder) || 0,
+        mainOptions: Array.isArray(m.mainOptions)
+          ? m.mainOptions.map((opt) => ({
+              id: String(opt.id || ''),
+              name: {
+                en: String(opt.name?.en || ''),
+                th: String(opt.name?.th || ''),
+              },
+              priceAdjustment: Number(opt.priceAdjustment) || 0,
+              availability: opt.availability || 'available',
+              outUntilDate: opt.outUntilDate ? String(opt.outUntilDate) : undefined,
+              displayOrder: Number(opt.displayOrder) || 0,
+            }))
+          : undefined,
         modifierGroupIds: Array.isArray(m.modifierGroupIds) ? m.modifierGroupIds.map(String) : [],
       }))
     : [];

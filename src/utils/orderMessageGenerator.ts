@@ -64,7 +64,18 @@ export function generateOrderMessage({
       const itemLine = `* ${foodName} ${item.quantity}`;
       const optionLines: string[] = [];
 
-      // Add selected modifier options
+      // Add selected main option (ตัวเลือกหลัก)
+      if (item.selectedMainOption) {
+        const mainOptName = (isEn ? item.selectedMainOption.name.en : item.selectedMainOption.name.th)
+          || item.selectedMainOption.name[lang]
+          || item.selectedMainOption.name.th
+          || item.selectedMainOption.name.en;
+        if (mainOptName && mainOptName.trim()) {
+          optionLines.push(`  + ${isEn ? 'Main' : 'ตัวเลือกหลัก'}: ${mainOptName.trim()}`);
+        }
+      }
+
+      // Add selected modifier options (เมนูย่อย)
       if (Array.isArray(item.selectedModifiers) && item.selectedModifiers.length > 0) {
         for (const mod of item.selectedModifiers) {
           const optName = (isEn ? mod.optionName.en : mod.optionName.th)

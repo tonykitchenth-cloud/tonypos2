@@ -5,6 +5,7 @@ import {
   Category,
   DailySchedule,
   MenuItem,
+  MainOption,
   ModifierGroup,
   ModifierOption,
   RestaurantOrder,
@@ -14,6 +15,7 @@ import {
 import { formatCurrency } from '../../utils/pricing';
 import { normalizeHolidayDateStr } from '../../utils/availabilityEngine';
 import { processFoodImageFile } from '../../utils/imageUtils';
+import { getDefaultMainOptions } from '../../utils/menuHelpers';
 import { defaultSettings } from '../../data/defaultSettings';
 import { HolidayCalendarModal } from './HolidayCalendarModal';
 import { OwnerOrdersTab } from './OwnerOrdersTab';
@@ -478,6 +480,21 @@ export const OwnerDashboard: React.FC = () => {
   // MENU ITEM CRUD OPERATIONS
   // ----------------------------------------------------
   const handleSaveMenuItem = (item: MenuItem) => {
+    const rawOptions = (item.mainOptions && item.mainOptions.length > 0)
+      ? item.mainOptions
+      : getDefaultMainOptions(item);
+
+    const safeMainOptions: MainOption[] = rawOptions.map((opt, idx) => ({
+      id: opt.id || `opt_${Date.now()}_${idx}`,
+      name: {
+        th: opt.name?.th?.trim() || opt.name?.en?.trim() || `ตัวเลือก ${idx + 1}`,
+        en: opt.name?.en?.trim() || opt.name?.th?.trim() || `Option ${idx + 1}`,
+      },
+      priceAdjustment: typeof opt.priceAdjustment === 'number' ? opt.priceAdjustment : Number(opt.priceAdjustment) || 0,
+      availability: opt.availability || 'available',
+      displayOrder: idx + 1,
+    }));
+
     const safeItem: MenuItem = {
       ...item,
       name: {
@@ -488,6 +505,7 @@ export const OwnerDashboard: React.FC = () => {
         th: item.description?.th || '',
         en: item.description?.en || item.description?.th || '',
       },
+      mainOptions: safeMainOptions,
     };
 
     if (isAddingItem) {
@@ -501,6 +519,106 @@ export const OwnerDashboard: React.FC = () => {
     setIsAddingItem(false);
     setFoodImageError(null);
     setShowRemoveImageConfirm(false);
+  };
+
+  // Main Options handlers inside editingItem
+  const handleAddMainOptionToEditingItem = () => {
+    if (!editingItem) return;
+    const current = (editingItem.mainOptions && editingItem.mainOptions.length > 0)
+      ? [...editingItem.mainOptions]
+      : getDefaultMainOptions(editingItem);
+
+    const newOpt: MainOption = {
+      id: `opt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: {
+        th: 'ตัวเลือกใหม่',
+        en: 'New Option',
+      },
+      priceAdjustment: 0,
+      availability: 'available',
+      displayOrder: current.length + 1,
+    };
+
+    setEditingItem({
+      ...editingItem,
+      mainOptions: [...current, newOpt],
+    });
+  };
+
+  const handleDeleteMainOptionFromEditingItem = (optId: string) => {
+    if (!editingItem) return;
+    const current = (editingItem.mainOptions && editingItem.mainOptions.length > 0)
+      ? editingItem.mainOptions
+      : getDefaultMainOptions(editingItem);
+
+    if (current.length <= 1) {
+      showToast(
+        language === 'th'
+          ? 'ต้องมีตัวเลือกหลักอย่างน้อย 1 ตัวเลือก'
+          : 'At least one main option is required.'
+      );
+      return;
+    }
+
+    const filtered = current.filter(o => o.id !== optId);
+    const reindexed = filtered.map((o, idx) => ({ ...o, displayOrder: idx + 1 }));
+    setEditingItem({
+      ...editingItem,
+      mainOptions: reindexed,
+    });
+  };
+
+  const handleMoveMainOptionInEditingItem = (optId: string, direction: 'up' | 'down') => {
+    if (!editingItem) return;
+    const current = (editingItem.mainOptions && editingItem.mainOptions.length > 0)
+      ? editingItem.mainOptions
+      : getDefaultMainOptions(editingItem);
+
+    const sorted = [...current].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    const index = sorted.findIndex(o => o.id === optId);
+    if (index < 0) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    const curr = sorted[index];
+    const target = sorted[targetIndex];
+    const currOrder = curr.displayOrder ?? index + 1;
+    const targetOrder = target.displayOrder ?? targetIndex + 1;
+
+    const updated = current.map(o => {
+      if (o.id === curr.id) return { ...o, displayOrder: targetOrder };
+      if (o.id === target.id) return { ...o, displayOrder: currOrder };
+      return o;
+    });
+
+    setEditingItem({
+      ...editingItem,
+      mainOptions: updated,
+    });
+  };
+
+  const handleUpdateMainOptionInEditingItem = (optId: string, updates: Partial<MainOption>) => {
+    if (!editingItem) return;
+    const current = (editingItem.mainOptions && editingItem.mainOptions.length > 0)
+      ? [...editingItem.mainOptions]
+      : getDefaultMainOptions(editingItem);
+
+    const updated = current.map(o => {
+      if (o.id !== optId) return o;
+      return {
+        ...o,
+        ...updates,
+        name: {
+          ...o.name,
+          ...(updates.name || {}),
+        },
+      };
+    });
+
+    setEditingItem({
+      ...editingItem,
+      mainOptions: updated,
+    });
   };
 
   const handleDeleteMenuItem = (itemId: string) => {
@@ -1125,6 +1243,7 @@ export const OwnerDashboard: React.FC = () => {
                           isSignature: false,
                           isPopular: false,
                           displayOrder: menuItems.length + 1,
+                          mainOptions: getDefaultMainOptions(),
                           modifierGroupIds: [],
                         });
                       }}
@@ -1209,6 +1328,7 @@ export const OwnerDashboard: React.FC = () => {
                           isSignature: false,
                           isPopular: false,
                           displayOrder: menuItems.length + 1,
+                          mainOptions: getDefaultMainOptions(),
                           modifierGroupIds: [],
                         });
                       }}
@@ -1411,6 +1531,7 @@ export const OwnerDashboard: React.FC = () => {
                                     isSignature: false,
                                     isPopular: false,
                                     displayOrder: rawCategoryItems.length + 1,
+                                    mainOptions: getDefaultMainOptions(),
                                     modifierGroupIds: [],
                                   });
                                 }}
@@ -1478,11 +1599,16 @@ export const OwnerDashboard: React.FC = () => {
                                         <strong className="text-gray-900">
                                           {formatCurrency(item.basePrice, settings.currencySymbol)}
                                         </strong>
+                                        <span className="text-[#E65100] font-bold">
+                                          {' • '}
+                                          {(item.mainOptions?.length || getDefaultMainOptions(item).length)}{' '}
+                                          {language === 'th' ? 'ตัวเลือกหลัก' : 'main options'}
+                                        </span>
                                         {item.modifierGroupIds && item.modifierGroupIds.length > 0 && (
                                           <span>
                                             {' • '}
                                             {item.modifierGroupIds.length}{' '}
-                                            {language === 'th' ? 'กลุ่มตัวเลือกเสริม' : 'modifier groups'}
+                                            {language === 'th' ? 'เมนูย่อย (ตัวเลือกเสริม)' : 'sub-options'}
                                           </span>
                                         )}
                                       </p>
@@ -1531,6 +1657,9 @@ export const OwnerDashboard: React.FC = () => {
                                             en: item.description?.en || (typeof item.description === 'string' ? item.description : ''),
                                             th: item.description?.th || '',
                                           },
+                                          mainOptions: (item.mainOptions && item.mainOptions.length > 0)
+                                            ? item.mainOptions
+                                            : getDefaultMainOptions(item),
                                         });
                                       }}
                                       className="p-1.5 text-gray-600 hover:text-[#E65100] rounded-lg hover:bg-orange-50 cursor-pointer"
@@ -1574,6 +1703,7 @@ export const OwnerDashboard: React.FC = () => {
                                     isSignature: false,
                                     isPopular: false,
                                     displayOrder: 1,
+                                    mainOptions: getDefaultMainOptions(),
                                     modifierGroupIds: [],
                                   });
                                 }}
@@ -2961,9 +3091,192 @@ export const OwnerDashboard: React.FC = () => {
                 </select>
               </div>
 
-              {/* Modifier Groups Attached */}
+              {/* ---------------- MAIN OPTIONS CONFIGURATION (ตัวเลือกหลัก) ---------------- */}
+              <div className="bg-orange-50/50 rounded-2xl p-4 border border-orange-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-[#E65100]" />
+                      <label className="font-extrabold text-sm text-[#1A1A1A]">
+                        {language === 'th' ? 'ตัวเลือกหลักของเมนูนี้ (Main Options)' : 'Main Options for this Dish'}
+                      </label>
+                      <span className="text-[10px] bg-orange-100 text-[#E65100] font-black px-2 py-0.5 rounded-full">
+                        {language === 'th' ? 'จำเป็น (เลือก 1)' : 'Required (Choose 1)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {language === 'th'
+                        ? 'ตัวเลือกหลักที่ลูกค้าต้องเลือกเป็นอันดับแรก ก่อนลงมาเลือกเมนูย่อยด้านล่าง (สามารถ เพิ่ม - ลบ และย้ายตำแหน่งได้)'
+                        : 'Primary options customers must select first before sub-options below. You can add, delete, and reorder.'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMainOptionToEditingItem}
+                    className="px-3 py-1.5 rounded-xl bg-[#E65100] text-white text-xs font-bold hover:bg-[#D84315] flex items-center gap-1 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{language === 'th' ? 'เพิ่มตัวเลือกหลัก' : 'Add Main Option'}</span>
+                  </button>
+                </div>
+
+                {/* Main Options List */}
+                <div className="space-y-2">
+                  {((editingItem.mainOptions && editingItem.mainOptions.length > 0)
+                    ? editingItem.mainOptions
+                    : getDefaultMainOptions(editingItem)
+                  )
+                    .slice()
+                    .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+                    .map((opt, optIdx, arr) => (
+                      <div
+                        key={opt.id}
+                        className="bg-white rounded-xl p-3 border border-gray-200 shadow-2xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-orange-100 text-[#E65100] font-black text-[10px] flex items-center justify-center">
+                              {optIdx + 1}
+                            </span>
+                            <span className="text-xs font-extrabold text-gray-800">
+                              {opt.name.th || opt.name.en || 'Untitled Option'}
+                            </span>
+                          </div>
+
+                          {/* Reorder and Delete Actions */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={optIdx === 0}
+                              title={language === 'th' ? 'เลื่อนขึ้น' : 'Move Up'}
+                              onClick={(e) => {
+                                e.currentTarget.blur();
+                                handleMoveMainOptionInEditingItem(opt.id, 'up');
+                              }}
+                              className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded hover:bg-gray-100 cursor-pointer"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={optIdx === arr.length - 1}
+                              title={language === 'th' ? 'เลื่อนลง' : 'Move Down'}
+                              onClick={(e) => {
+                                e.currentTarget.blur();
+                                handleMoveMainOptionInEditingItem(opt.id, 'down');
+                              }}
+                              className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded hover:bg-gray-100 cursor-pointer"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={arr.length <= 1}
+                              title={language === 'th' ? 'ลบตัวเลือก' : 'Delete Option'}
+                              onClick={() => handleDeleteMainOptionFromEditingItem(opt.id)}
+                              className="p-1 text-gray-400 hover:text-rose-600 disabled:opacity-20 rounded hover:bg-rose-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Inputs: Thai name, English name, Price adjustment */}
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+                          {/* Thai Name */}
+                          <div className="sm:col-span-5">
+                            <label className="text-[10px] font-bold text-gray-500 block mb-0.5">
+                              {language === 'th' ? 'ชื่อภาษาไทย *' : 'Thai Name *'}
+                            </label>
+                            <input
+                              type="text"
+                              value={opt.name.th}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                handleUpdateMainOptionInEditingItem(opt.id, {
+                                  name: {
+                                    th: val,
+                                    en: opt.name.en,
+                                  },
+                                });
+                              }}
+                              onBlur={async () => {
+                                if (opt.name.th?.trim() && (!opt.name.en || opt.name.en === 'New Option' || opt.name.en === 'Untitled Option')) {
+                                  const translated = await translateThaiToEnglish(opt.name.th);
+                                  if (translated) {
+                                    handleUpdateMainOptionInEditingItem(opt.id, {
+                                      name: {
+                                        th: opt.name.th,
+                                        en: translated,
+                                      },
+                                    });
+                                  }
+                                }
+                              }}
+                              placeholder="เช่น ธรรมดา, หมูสับ, กุ้งสด"
+                              className="w-full bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] outline-hidden"
+                            />
+                          </div>
+
+                          {/* English Name */}
+                          <div className="sm:col-span-4">
+                            <label className="text-[10px] font-bold text-gray-500 block mb-0.5">
+                              {language === 'th' ? 'ชื่อภาษาอังกฤษ' : 'English Name'}
+                            </label>
+                            <input
+                              type="text"
+                              value={opt.name.en}
+                              onChange={(e) => {
+                                handleUpdateMainOptionInEditingItem(opt.id, {
+                                  name: {
+                                    th: opt.name.th,
+                                    en: e.target.value,
+                                  },
+                                });
+                              }}
+                              placeholder="e.g. Regular, Minced Pork, Shrimp"
+                              className="w-full bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] outline-hidden"
+                            />
+                          </div>
+
+                          {/* Price Adjustment (+฿) */}
+                          <div className="sm:col-span-3">
+                            <label className="text-[10px] font-bold text-gray-500 block mb-0.5">
+                              {language === 'th' ? 'ปรับราคา (+/- ฿)' : 'Price (+/- ฿)'}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[11px]">
+                                +฿
+                              </span>
+                              <input
+                                type="number"
+                                value={opt.priceAdjustment ?? 0}
+                                onChange={(e) => {
+                                  handleUpdateMainOptionInEditingItem(opt.id, {
+                                    priceAdjustment: Number(e.target.value) || 0,
+                                  });
+                                }}
+                                className="w-full bg-gray-50 pl-7 pr-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-[#E65100] focus:bg-white focus:border-[#E65100] outline-hidden"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Modifier Groups Attached (เมนูย่อย / ตัวเลือกเสริม) */}
               <div>
-                <label className="font-bold text-gray-700 block mb-1">Attach Modifier Groups</label>
+                <label className="font-bold text-gray-700 block mb-1">
+                  {language === 'th' ? 'เมนูย่อย / กลุ่มตัวเลือกเสริม (Sub-options & Add-ons)' : 'Sub-options & Modifier Groups'}
+                </label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  {language === 'th'
+                    ? 'เลือกกลุ่มตัวเลือกเสริมที่ต้องการผูกกับเมนูนี้ (เช่น ระดับความเผ็ด, ท็อปปิ้งพิเศษ)'
+                    : 'Select additional modifier groups to attach (e.g. Spiciness, Extra Toppings).'}
+                </p>
                 <div className="space-y-1 bg-gray-50 p-2.5 rounded-xl">
                   {modifierGroups.map(group => {
                     const isChecked = editingItem.modifierGroupIds.includes(group.id);

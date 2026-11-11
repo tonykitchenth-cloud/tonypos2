@@ -2,6 +2,7 @@ import { AppStateData, CartItem, CustomerProfile, Language } from '../types';
 import { defaultSettings } from '../data/defaultSettings';
 import { demoCategories, demoMenuItems, demoModifierGroups } from '../data/demoData';
 import { cleanExpiredHolidays } from './availabilityEngine';
+import { getDefaultMainOptions } from './menuHelpers';
 
 export const APP_DATA_VERSION = 1;
 
@@ -103,9 +104,15 @@ export function loadAppState(): AppStateData {
       categories: Array.isArray(parsed.categories) && parsed.categories.length > 0 
         ? parsed.categories 
         : demoCategories,
-      menuItems: Array.isArray(parsed.menuItems) && parsed.menuItems.length > 0 
+      menuItems: (Array.isArray(parsed.menuItems) && parsed.menuItems.length > 0 
         ? parsed.menuItems 
-        : demoMenuItems,
+        : demoMenuItems
+      ).map(item => ({
+        ...item,
+        mainOptions: (Array.isArray(item.mainOptions) && item.mainOptions.length > 0)
+          ? item.mainOptions
+          : getDefaultMainOptions(item),
+      })),
       modifierGroups: Array.isArray(parsed.modifierGroups) && parsed.modifierGroups.length > 0 
         ? parsed.modifierGroups 
         : demoModifierGroups,

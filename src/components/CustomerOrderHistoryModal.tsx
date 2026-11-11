@@ -209,6 +209,11 @@ export const CustomerOrderHistoryModal: React.FC = () => {
                           <span className="font-medium">
                             <span className="font-bold text-[#1A1A1A]">{item.quantity}x</span>{' '}
                             {language === 'th' ? (item.name.th || item.name.en) : item.name.en}
+                            {item.selectedMainOption && (
+                              <span className="text-orange-600 font-bold text-[10px] block">
+                                • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
+                              </span>
+                            )}
                             {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                               <span className="text-gray-400 text-[10px] block">
                                 ({item.selectedModifiers.map(m => language === 'th' ? m.optionName.th : m.optionName.en).join(', ')})

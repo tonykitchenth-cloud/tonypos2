@@ -493,6 +493,12 @@ export const CustomerOrderStatusModal: React.FC<CustomerOrderStatusModalProps> =
                               (typeof item.name === 'string' ? item.name : '')}
                           </span>
                         </div>
+                        {item.selectedMainOption && (
+                          <div className="text-[11px] text-orange-400 font-bold pl-4 mt-0.5">
+                            • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {item.selectedMainOption.name?.[language] || item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}
+                            {item.selectedMainOption.priceAdjustment > 0 && ` (+฿${item.selectedMainOption.priceAdjustment})`}
+                          </div>
+                        )}
                         {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                           <div className="text-[11px] text-neutral-400 pl-4 space-y-0.5 mt-0.5">
                             {item.selectedModifiers.map((mod, mIdx) => (

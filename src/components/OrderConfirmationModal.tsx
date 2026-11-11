@@ -277,6 +277,11 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                           <span className="text-orange-400 font-bold">{item.quantity}×</span>
                           <span>{item.name?.[language] || item.name?.en || (typeof item.name === 'string' ? item.name : '')}</span>
                         </div>
+                        {item.selectedMainOption && (
+                          <div className="text-[11px] text-orange-400 font-bold pl-4 mt-0.5">
+                            • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {item.selectedMainOption.name?.[language] || item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}
+                          </div>
+                        )}
                         {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                           <div className="text-[11px] text-neutral-400 pl-4 space-y-0.5 mt-0.5">
                             {item.selectedModifiers.map((mod, mIdx) => (
