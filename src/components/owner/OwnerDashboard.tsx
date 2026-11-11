@@ -640,17 +640,22 @@ export const OwnerDashboard: React.FC = () => {
 
   const handleMoveModifierGroup = (groupId: string, direction: 'up' | 'down') => {
     setModifierGroups(prev => {
-      const index = prev.findIndex(g => g.id === groupId);
+      const sorted = [...prev].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+      const index = sorted.findIndex(g => g.id === groupId);
       if (index < 0) return prev;
       const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      if (targetIndex < 0 || targetIndex >= sorted.length) return prev;
 
-      const newGroups = [...prev];
-      const temp = newGroups[index];
-      newGroups[index] = newGroups[targetIndex];
-      newGroups[targetIndex] = temp;
+      const currentItem = sorted[index];
+      const targetItem = sorted[targetIndex];
+      const currentOrder = currentItem.displayOrder ?? index + 1;
+      const targetOrder = targetItem.displayOrder ?? targetIndex + 1;
 
-      return newGroups.map((g, idx) => ({ ...g, displayOrder: idx + 1 }));
+      return prev.map(g => {
+        if (g.id === currentItem.id) return { ...g, displayOrder: targetOrder };
+        if (g.id === targetItem.id) return { ...g, displayOrder: currentOrder };
+        return g;
+      });
     });
   };
 
@@ -658,19 +663,26 @@ export const OwnerDashboard: React.FC = () => {
     setModifierGroups(prev => {
       return prev.map(group => {
         if (group.id !== groupId) return group;
-        const index = group.options.findIndex(o => o.id === optionId);
+        const sortedOpts = [...group.options].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+        const index = sortedOpts.findIndex(o => o.id === optionId);
         if (index < 0) return group;
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
-        if (targetIndex < 0 || targetIndex >= group.options.length) return group;
+        if (targetIndex < 0 || targetIndex >= sortedOpts.length) return group;
 
-        const newOptions = [...group.options];
-        const temp = newOptions[index];
-        newOptions[index] = newOptions[targetIndex];
-        newOptions[targetIndex] = temp;
+        const currentOpt = sortedOpts[index];
+        const targetOpt = sortedOpts[targetIndex];
+        const currentOrder = currentOpt.displayOrder ?? index + 1;
+        const targetOrder = targetOpt.displayOrder ?? targetIndex + 1;
+
+        const updatedOpts = group.options.map(opt => {
+          if (opt.id === currentOpt.id) return { ...opt, displayOrder: targetOrder };
+          if (opt.id === targetOpt.id) return { ...opt, displayOrder: currentOrder };
+          return opt;
+        });
 
         return {
           ...group,
-          options: newOptions.map((opt, idx) => ({ ...opt, displayOrder: idx + 1 })),
+          options: updatedOpts,
         };
       });
     });
@@ -1738,7 +1750,7 @@ export const OwnerDashboard: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {modifierGroups.map((group, groupIdx) => (
+                  {[...modifierGroups].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)).map((group, groupIdx) => (
                     <div key={group.id} className="bg-white rounded-3xl p-4 border border-gray-200 shadow-xs space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1759,7 +1771,10 @@ export const OwnerDashboard: React.FC = () => {
                             type="button"
                             disabled={groupIdx === 0}
                             title="Move Group Up"
-                            onClick={() => handleMoveModifierGroup(group.id, 'up')}
+                            onClick={(e) => {
+                              e.currentTarget.blur();
+                              handleMoveModifierGroup(group.id, 'up');
+                            }}
                             className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100 transition-colors"
                           >
                             <ArrowUp className="w-4 h-4" />
@@ -1769,7 +1784,10 @@ export const OwnerDashboard: React.FC = () => {
                             type="button"
                             disabled={groupIdx === modifierGroups.length - 1}
                             title="Move Group Down"
-                            onClick={() => handleMoveModifierGroup(group.id, 'down')}
+                            onClick={(e) => {
+                              e.currentTarget.blur();
+                              handleMoveModifierGroup(group.id, 'down');
+                            }}
                             className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30 rounded-lg hover:bg-gray-100 transition-colors"
                           >
                             <ArrowDown className="w-4 h-4" />
@@ -1796,7 +1814,7 @@ export const OwnerDashboard: React.FC = () => {
 
                       {/* Options list inside group */}
                       <div className="bg-gray-50 p-2.5 rounded-2xl divide-y divide-gray-100 text-xs">
-                        {group.options.map((opt, optIdx) => (
+                        {[...group.options].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)).map((opt, optIdx) => (
                           <div key={opt.id} className="py-2 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-[10px] font-bold text-gray-400 w-4 text-center">
@@ -1819,7 +1837,10 @@ export const OwnerDashboard: React.FC = () => {
                                 type="button"
                                 disabled={optIdx === 0}
                                 title="Move Option Up"
-                                onClick={() => handleMoveModifierOption(group.id, opt.id, 'up')}
+                                onClick={(e) => {
+                                  e.currentTarget.blur();
+                                  handleMoveModifierOption(group.id, opt.id, 'up');
+                                }}
                                 className="p-1 text-gray-400 hover:text-gray-800 disabled:opacity-20 rounded hover:bg-gray-200 transition-colors"
                               >
                                 <ArrowUp className="w-3.5 h-3.5" />
@@ -1829,7 +1850,10 @@ export const OwnerDashboard: React.FC = () => {
                                 type="button"
                                 disabled={optIdx === group.options.length - 1}
                                 title="Move Option Down"
-                                onClick={() => handleMoveModifierOption(group.id, opt.id, 'down')}
+                                onClick={(e) => {
+                                  e.currentTarget.blur();
+                                  handleMoveModifierOption(group.id, opt.id, 'down');
+                                }}
                                 className="p-1 text-gray-400 hover:text-gray-800 disabled:opacity-20 rounded hover:bg-gray-200 transition-colors"
                               >
                                 <ArrowDown className="w-3.5 h-3.5" />
