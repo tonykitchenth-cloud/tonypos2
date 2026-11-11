@@ -211,12 +211,22 @@ export const CustomerOrderHistoryModal: React.FC = () => {
                             {language === 'th' ? (item.name.th || item.name.en) : item.name.en}
                             {item.selectedMainOption && (
                               <span className="text-orange-600 font-bold text-[10px] block">
-                                • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
+                                • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main Option'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
+                                {item.selectedMainOption.priceAdjustment > 0 && ` (+฿${item.selectedMainOption.priceAdjustment})`}
                               </span>
                             )}
                             {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                              <span className="text-gray-400 text-[10px] block">
-                                ({item.selectedModifiers.map(m => language === 'th' ? m.optionName.th : m.optionName.en).join(', ')})
+                              <span className="text-gray-500 text-[10px] block space-y-0.5 mt-0.5">
+                                {item.selectedModifiers.map((m, mi) => {
+                                  const gName = language === 'th' ? (m.groupName?.th || m.groupName?.en) : (m.groupName?.en || m.groupName?.th);
+                                  const optName = language === 'th' ? (m.optionName?.th || m.optionName?.en) : (m.optionName?.en || m.optionName?.th);
+                                  const price = m.priceAdjustment > 0 ? ` (+฿${m.priceAdjustment})` : '';
+                                  return (
+                                    <span key={mi} className="block">
+                                      + {gName ? `${gName}: ` : ''}<strong className="text-gray-700">{optName}</strong>{price}
+                                    </span>
+                                  );
+                                })}
                               </span>
                             )}
                           </span>
@@ -343,11 +353,22 @@ export const CustomerOrderHistoryModal: React.FC = () => {
                       <span className="font-bold text-[#1A1A1A]">
                         {language === 'th' ? (item.name.th || item.name.en) : item.name.en}
                       </span>
-                      {item.selectedModifiers?.map((mod, mi) => (
-                        <span key={mi} className="block text-[10px] text-gray-400">
-                          + {language === 'th' ? mod.optionName.th : mod.optionName.en}
+                      {item.selectedMainOption && (
+                        <span className="block text-[10px] text-orange-600 font-bold">
+                          • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main Option'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
+                          {item.selectedMainOption.priceAdjustment > 0 && ` (+฿${item.selectedMainOption.priceAdjustment})`}
                         </span>
-                      ))}
+                      )}
+                      {item.selectedModifiers?.map((mod, mi) => {
+                        const gName = language === 'th' ? (mod.groupName?.th || mod.groupName?.en) : (mod.groupName?.en || mod.groupName?.th);
+                        const optName = language === 'th' ? (mod.optionName?.th || mod.optionName?.en) : (mod.optionName?.en || mod.optionName?.th);
+                        const price = mod.priceAdjustment > 0 ? ` (+฿${mod.priceAdjustment})` : '';
+                        return (
+                          <span key={mi} className="block text-[10px] text-gray-500">
+                            + {gName ? `${gName}: ` : ''}<strong>{optName}</strong>{price}
+                          </span>
+                        );
+                      })}
                     </div>
                     <div className="text-right shrink-0 font-mono ml-2">
                       <span className="text-gray-500 text-[11px]">{item.quantity} x ฿{item.unitPrice}</span>

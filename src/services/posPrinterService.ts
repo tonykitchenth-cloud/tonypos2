@@ -224,9 +224,16 @@ export class POSPrinterService {
       const priceStr = `THB ${(item.subtotal || 0).toLocaleString()}`;
       addKeyValue(itemTitle, priceStr);
 
+      if (item.selectedMainOption) {
+        const mainOptName = item.selectedMainOption.name?.en || item.selectedMainOption.name?.th || '';
+        if (mainOptName) {
+          addLine(`  * ${mainOptName}`);
+        }
+      }
+
       if (item.selectedModifiers && item.selectedModifiers.length > 0) {
         item.selectedModifiers.forEach((m) => {
-          const modName = m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '');
+          const modName = m.optionName?.en || m.optionName?.th || (typeof m.optionName === 'string' ? m.optionName : '');
           if (modName) {
             addLine(`  + ${modName}`);
           }

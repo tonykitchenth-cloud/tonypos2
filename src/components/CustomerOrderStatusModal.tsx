@@ -495,24 +495,22 @@ export const CustomerOrderStatusModal: React.FC<CustomerOrderStatusModalProps> =
                         </div>
                         {item.selectedMainOption && (
                           <div className="text-[11px] text-orange-400 font-bold pl-4 mt-0.5">
-                            • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {item.selectedMainOption.name?.[language] || item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}
+                            • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main Option'}: {item.selectedMainOption.name?.[language] || item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}
                             {item.selectedMainOption.priceAdjustment > 0 && ` (+฿${item.selectedMainOption.priceAdjustment})`}
                           </div>
                         )}
                         {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                           <div className="text-[11px] text-neutral-400 pl-4 space-y-0.5 mt-0.5">
-                            {item.selectedModifiers.map((mod, mIdx) => (
-                              <div key={mIdx}>
-                                +{' '}
-                                {mod.optionName?.[language] ||
-                                  mod.optionName?.en ||
-                                  (typeof mod.optionName === 'string'
-                                    ? mod.optionName
-                                    : '')}
-                                {mod.priceAdjustment > 0 &&
-                                  ` (+฿${mod.priceAdjustment})`}
-                              </div>
-                            ))}
+                            {item.selectedModifiers.map((mod, mIdx) => {
+                              const gName = mod.groupName?.[language] || mod.groupName?.th || mod.groupName?.en || '';
+                              const optName = mod.optionName?.[language] || mod.optionName?.th || mod.optionName?.en || (typeof mod.optionName === 'string' ? mod.optionName : '');
+                              return (
+                                <div key={mIdx}>
+                                  + {gName ? `${gName}: ` : ''}<span className="text-neutral-300 font-medium">{optName}</span>
+                                  {mod.priceAdjustment > 0 && ` (+฿${mod.priceAdjustment})`}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                         {item.specialRequest && (

@@ -158,6 +158,8 @@ export const OwnerDashboard: React.FC = () => {
   // Menu Item Editor Modal state
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [isModifierPickerOpen, setIsModifierPickerOpen] = useState(false);
+  const [modifierSearchQuery, setModifierSearchQuery] = useState('');
   const foodFileInputRef = useRef<HTMLInputElement>(null);
   const [foodImageError, setFoodImageError] = useState<string | null>(null);
   const [showRemoveImageConfirm, setShowRemoveImageConfirm] = useState(false);
@@ -2858,6 +2860,11 @@ export const OwnerDashboard: React.FC = () => {
                   type="text"
                   value={editingItem.name.th}
                   onChange={(e) => handleDishThaiNameChange(e.target.value)}
+                  onBlur={async () => {
+                    if (editingItem.name.th?.trim() && (!editingItem.name.en?.trim() || editingItem.name.en === 'Untitled')) {
+                      await handleTriggerItemNameTranslate();
+                    }
+                  }}
                   placeholder="เช่น ข้าวกะเพราหมูกรอบ, ต้มยำกุ้ง..."
                   className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
                 />
@@ -2904,64 +2911,8 @@ export const OwnerDashboard: React.FC = () => {
                   )}
                 </div>
                 <p className="text-[10px] text-gray-400 mt-0.5">
-                  แปลอัตโนมัติจากชื่อไทย สามารถแก้ไขเพิ่มเติมหรือพิมพ์เองได้ตลอดเวลา
+                  แปลเป็นภาษาอังกฤษอัตโนมัติจากชื่อไทย สามารถแก้ไขเพิ่มเติมหรือพิมพ์เองได้
                 </p>
-              </div>
-
-              {/* 3. Thai Description FIRST */}
-              <div>
-                <label className="font-bold text-gray-800 flex items-center justify-between mb-1">
-                  <span>คำอธิบายอาหาร (ภาษาไทย)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={editingItem.description.th}
-                  onChange={(e) => handleDishThaiDescChange(e.target.value)}
-                  placeholder="เช่น เสิร์ฟพร้อมข้าวสวยร้อนๆ หมูกรอบทอดกรอบสูตรเด็ดของร้าน..."
-                  className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
-                />
-              </div>
-
-              {/* 4. English Description SECOND */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-gray-700">
-                    คำอธิบายภาษาอังกฤษ (English Description)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleTriggerItemDescTranslate}
-                    disabled={isTranslatingItemDesc || !editingItem.description.th.trim()}
-                    className="text-[11px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
-                    title="กดเพื่อแปลคำอธิบายเป็นภาษาอังกฤษอัตโนมัติ"
-                  >
-                    {isTranslatingItemDesc ? (
-                      <span className="flex items-center gap-1 text-orange-600 animate-pulse">
-                        <Sparkles className="w-3 h-3 animate-spin" />
-                        กำลังแปล...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200/60">
-                        <Sparkles className="w-3 h-3 text-[#E65100]" />
-                        แปลอัตโนมัติ
-                      </span>
-                    )}
-                  </button>
-                </div>
-                <div className="relative">
-                  <textarea
-                    rows={2}
-                    value={editingItem.description.en}
-                    onChange={(e) => setEditingItem({ ...editingItem, description: { ...editingItem.description, en: e.target.value } })}
-                    placeholder="e.g. Served with hot jasmine rice and signature crispy pork (Auto-translated, editable)"
-                    className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
-                  />
-                  {isTranslatingItemDesc && (
-                    <div className="absolute right-3 top-3">
-                      <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -3267,36 +3218,101 @@ export const OwnerDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Modifier Groups Attached (เมนูย่อย / ตัวเลือกเสริม) */}
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">
-                  {language === 'th' ? 'เมนูย่อย / กลุ่มตัวเลือกเสริม (Sub-options & Add-ons)' : 'Sub-options & Modifier Groups'}
-                </label>
-                <p className="text-[11px] text-gray-500 mb-2">
-                  {language === 'th'
-                    ? 'เลือกกลุ่มตัวเลือกเสริมที่ต้องการผูกกับเมนูนี้ (เช่น ระดับความเผ็ด, ท็อปปิ้งพิเศษ)'
-                    : 'Select additional modifier groups to attach (e.g. Spiciness, Extra Toppings).'}
-                </p>
-                <div className="space-y-1 bg-gray-50 p-2.5 rounded-xl">
-                  {modifierGroups.map(group => {
-                    const isChecked = editingItem.modifierGroupIds.includes(group.id);
-                    return (
-                      <label key={group.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            const newIds = e.target.checked
-                              ? [...editingItem.modifierGroupIds, group.id]
-                              : editingItem.modifierGroupIds.filter(id => id !== group.id);
-                            setEditingItem({ ...editingItem, modifierGroupIds: newIds });
-                          }}
-                        />
-                        <span>{group.name?.en || (typeof group.name === 'string' ? group.name : 'Group')} ({group.options?.length || 0} options)</span>
-                      </label>
-                    );
-                  })}
+              {/* Modifier Groups Attached (เมนูย่อย / ตัวเลือกเสริมที่เลือกใช้งาน) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-bold text-gray-700 block text-xs">
+                      {language === 'th' ? 'ตัวเลือกย่อยที่เลือกใช้งาน' : 'Attached Sub-options & Add-ons'}
+                    </label>
+                    <p className="text-[11px] text-gray-500">
+                      {language === 'th'
+                        ? 'แสดงเฉพาะกลุ่มตัวเลือกย่อยที่ผูกกับเมนูนี้'
+                        : 'Only sub-options attached to this menu item.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModifierSearchQuery('');
+                      setIsModifierPickerOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#E65100] border border-orange-200 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{language === 'th' ? 'เพิ่มตัวเลือกที่จะใช้งาน' : 'Add Sub-options'}</span>
+                  </button>
                 </div>
+
+                {/* List only selected modifier groups */}
+                {editingItem.modifierGroupIds && editingItem.modifierGroupIds.length > 0 ? (
+                  <div className="space-y-2">
+                    {editingItem.modifierGroupIds.map((groupId) => {
+                      const group = modifierGroups.find(g => g.id === groupId);
+                      if (!group) return null;
+                      const gName = group.name?.[language] || group.name?.th || group.name?.en || 'Group';
+                      const optCount = group.options?.length || 0;
+                      return (
+                        <div
+                          key={groupId}
+                          className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-gray-800 truncate">
+                                {gName}
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 font-semibold shrink-0">
+                                {optCount} {language === 'th' ? 'ตัวเลือก' : 'options'}
+                              </span>
+                              {group.required && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-[#E65100] font-bold shrink-0">
+                                  {language === 'th' ? 'จำเป็น' : 'Required'}
+                                </span>
+                              )}
+                            </div>
+                            {group.options && group.options.length > 0 && (
+                              <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                                {group.options.map(o => o.name?.[language] || o.name?.th || o.name?.en).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingItem({
+                                ...editingItem,
+                                modifierGroupIds: editingItem.modifierGroupIds.filter(id => id !== groupId),
+                              });
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title={language === 'th' ? 'นำออก' : 'Remove'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 px-3 bg-gray-50/70 border border-dashed border-gray-200 rounded-2xl">
+                    <p className="text-xs text-gray-500 font-medium">
+                      {language === 'th'
+                        ? 'ยังไม่มีตัวเลือกย่อยที่ถูกเลือกใช้งานสำหรับเมนูนี้'
+                        : 'No sub-options attached yet.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModifierSearchQuery('');
+                        setIsModifierPickerOpen(true);
+                      }}
+                      className="mt-2 text-xs font-bold text-[#E65100] hover:underline cursor-pointer"
+                    >
+                      + {language === 'th' ? 'คลิกที่นี่เพื่อเลือกกลุ่มตัวเลือกย่อย' : 'Click here to attach sub-options'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-4 pt-1">
@@ -3377,6 +3393,150 @@ export const OwnerDashboard: React.FC = () => {
                     className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-xs"
                   >
                     {t('confirmRemoveImageBtn')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal เลือกตัวเลือกย่อยที่จะใช้งาน (Sub-options Picker Modal) */}
+          {isModifierPickerOpen && (
+            <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden animate-in fade-in zoom-in duration-150">
+                {/* Header */}
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-[#1A1A1A]">
+                      {language === 'th' ? 'เลือกตัวเลือกย่อยที่จะใช้งาน' : 'Select Sub-options & Add-ons'}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {language === 'th'
+                        ? 'ติ๊กเลือกกลุ่มตัวเลือกที่ต้องการผูกกับเมนูนี้'
+                        : 'Check the modifier groups you want to attach to this dish'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsModifierPickerOpen(false)}
+                    className="p-1 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Search Bar & Fast Select */}
+                <div className="px-4 pt-3 pb-2 border-b border-gray-100 space-y-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={modifierSearchQuery}
+                      onChange={(e) => setModifierSearchQuery(e.target.value)}
+                      placeholder={language === 'th' ? 'ค้นหาชื่อกลุ่มตัวเลือก...' : 'Search modifier group...'}
+                      className="w-full bg-gray-50 pl-9 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] outline-hidden"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-500">
+                    <span>
+                      {language === 'th' ? 'เลือกแล้ว' : 'Selected'}: <strong className="text-[#E65100]">{editingItem.modifierGroupIds.length}</strong> {language === 'th' ? 'กลุ่ม' : 'groups'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = modifierGroups.map(g => g.id);
+                          setEditingItem({ ...editingItem, modifierGroupIds: allIds });
+                        }}
+                        className="text-orange-600 font-bold hover:underline cursor-pointer"
+                      >
+                        {language === 'th' ? 'เลือกทั้งหมด' : 'Select All'}
+                      </button>
+                      <span>|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingItem({ ...editingItem, modifierGroupIds: [] });
+                        }}
+                        className="text-gray-500 hover:text-gray-700 hover:underline cursor-pointer"
+                      >
+                        {language === 'th' ? 'ล้างทั้งหมด' : 'Clear All'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* List of modifier groups */}
+                <div className="p-4 overflow-y-auto space-y-2.5 flex-1 custom-scrollbar">
+                  {modifierGroups.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 text-xs">
+                      {language === 'th' ? 'ยังไม่ได้สร้างกลุ่มตัวเลือกย่อยในระบบ' : 'No modifier groups found.'}
+                    </div>
+                  ) : (
+                    modifierGroups
+                      .filter(g => {
+                        if (!modifierSearchQuery.trim()) return true;
+                        const query = modifierSearchQuery.toLowerCase();
+                        const th = (g.name?.th || '').toLowerCase();
+                        const en = (g.name?.en || '').toLowerCase();
+                        return th.includes(query) || en.includes(query);
+                      })
+                      .map((group) => {
+                        const isChecked = editingItem.modifierGroupIds.includes(group.id);
+                        const groupTitle = group.name?.[language] || group.name?.th || group.name?.en || 'Group';
+                        return (
+                          <label
+                            key={group.id}
+                            className={`flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                              isChecked
+                                ? 'bg-orange-50/70 border-[#E65100] shadow-xs'
+                                : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const newIds = e.target.checked
+                                  ? [...editingItem.modifierGroupIds, group.id]
+                                  : editingItem.modifierGroupIds.filter(id => id !== group.id);
+                                setEditingItem({ ...editingItem, modifierGroupIds: newIds });
+                              }}
+                              className="mt-1 h-4 w-4 rounded border-gray-300 text-[#E65100] focus:ring-[#E65100]"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-bold ${isChecked ? 'text-[#1A1A1A]' : 'text-gray-700'}`}>
+                                  {groupTitle}
+                                </span>
+                                <span className="text-[10px] px-2 py-0.2 rounded-md bg-gray-100 text-gray-600 font-semibold">
+                                  {group.options?.length || 0} {language === 'th' ? 'ตัวเลือก' : 'options'}
+                                </span>
+                                {group.required && (
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-100 text-[#E65100] font-bold">
+                                    {language === 'th' ? 'จำเป็น' : 'Required'}
+                                  </span>
+                                )}
+                              </div>
+                              {group.options && group.options.length > 0 && (
+                                <p className="text-[11px] text-gray-500 mt-1 line-clamp-1">
+                                  {group.options.map(opt => `${opt.name?.[language] || opt.name?.th || opt.name?.en}${opt.priceAdjustment ? ` (+฿${opt.priceAdjustment})` : ''}`).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50/50">
+                  <button
+                    type="button"
+                    onClick={() => setIsModifierPickerOpen(false)}
+                    className="px-5 py-2 rounded-xl bg-[#E65100] text-white text-xs font-bold hover:bg-[#D84315] transition-colors cursor-pointer"
+                  >
+                    {language === 'th' ? 'เสร็จสิ้น / บันทึกตัวเลือก' : 'Done / Confirm'}
                   </button>
                 </div>
               </div>

@@ -1519,12 +1519,12 @@ export const OwnerOrdersTab: React.FC = () => {
             {selectedOrderForPrint.items.map((item, idx) => (
               <div key={idx} className="flex justify-between text-xs">
                 <div>
-                  <p><strong>{item.quantity}x {item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}</strong></p>
+                  <p><strong>{item.quantity}x {item.name?.th || item.name?.en || (typeof item.name === 'string' ? item.name : 'Custom Item')}</strong></p>
                   {item.selectedMainOption && (
-                    <p className="pl-2 font-bold text-orange-700">• Main: {item.selectedMainOption.name?.en || item.selectedMainOption.name?.th}</p>
+                    <p className="pl-2 font-bold">• {item.selectedMainOption.name?.th || item.selectedMainOption.name?.en}</p>
                   )}
                   {item.selectedModifiers?.map((m, mIdx) => (
-                    <p key={mIdx} className="pl-2">+ {m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '')}</p>
+                    <p key={mIdx} className="pl-2">+ {m.optionName?.th || m.optionName?.en || (typeof m.optionName === 'string' ? m.optionName : '')}</p>
                   ))}
                   {item.specialRequest && <p className="pl-2 italic">"{item.specialRequest}"</p>}
                 </div>
