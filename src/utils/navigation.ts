@@ -91,7 +91,7 @@ export function navigateTo(route: AppRoute) {
   const basePath = getBaseAppPath();
   const targetPath =
     route === 'owner'
-      ? `${basePath}owner`
+      ? `${basePath}owner/`
       : route === 'rider'
       ? `${basePath}rider`
       : basePath;
@@ -115,13 +115,13 @@ export function getRiderShareUrl(): string {
 
 /**
  * Returns a universal, direct shareable URL for the restaurant owner portal
- * that works seamlessly on GitHub Pages, custom domains, and local preview.
+ * pointing to the dedicated installable /owner/ PWA entry point.
  */
 export function getOwnerShareUrl(): string {
-  if (typeof window === 'undefined') return '/owner';
+  if (typeof window === 'undefined') return '/owner/';
   const origin = window.location.origin;
   const basePath = getBaseAppPath();
-  return `${origin}${basePath}?view=owner`;
+  return `${origin}${basePath}owner/`;
 }
 
 /**

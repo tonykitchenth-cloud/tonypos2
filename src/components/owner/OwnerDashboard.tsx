@@ -26,7 +26,7 @@ import { OwnerPOSInstallButton } from './OwnerPOSInstallButton';
 import { orderNotificationService } from '../../services/orderNotificationService';
 import { unlockAudioContext, playNotificationSound } from '../../utils/soundAlarm';
 import { navigateTo, getLogoUrl, getOwnerShareUrl } from '../../utils/navigation';
-import { translateThaiToEnglish } from '../../utils/translator';
+import { translateThaiToEnglish, containsThai } from '../../utils/translator';
 import {
   X,
   LogOut,
@@ -194,150 +194,239 @@ export const OwnerDashboard: React.FC = () => {
   // THAI-FIRST AUTO-TRANSLATION STATE & HANDLERS
   // ----------------------------------------------------
   const [isTranslatingItemName, setIsTranslatingItemName] = useState(false);
-  const [isTranslatingItemDesc, setIsTranslatingItemDesc] = useState(false);
   const [isTranslatingCatName, setIsTranslatingCatName] = useState(false);
   const [isTranslatingGroupName, setIsTranslatingGroupName] = useState(false);
   const [translatingOptId, setTranslatingOptId] = useState<string | null>(null);
+  const [translatingMainOptId, setTranslatingMainOptId] = useState<string | null>(null);
+  const [isTranslatingTagline, setIsTranslatingTagline] = useState(false);
+  const [isTranslatingEmergency, setIsTranslatingEmergency] = useState(false);
 
   const itemNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const itemDescDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const groupNameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optDebounceMapRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const mainOptDebounceMapRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const taglineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emergencyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest request counters to prevent stale async responses overwriting newer edits
+  const itemNameReqIdRef = useRef(0);
+  const catNameReqIdRef = useRef(0);
+  const groupNameReqIdRef = useRef(0);
+  const optReqIdMapRef = useRef<Record<string, number>>({});
+  const mainOptReqIdMapRef = useRef<Record<string, number>>({});
+  const taglineReqIdRef = useRef(0);
+  const emergencyReqIdRef = useRef(0);
 
   const handleDishThaiNameChange = (val: string) => {
     setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
     if (itemNameDebounceRef.current) clearTimeout(itemNameDebounceRef.current);
-    if (!val.trim()) return;
+    const reqId = ++itemNameReqIdRef.current;
+    if (!val.trim()) {
+      setIsTranslatingItemName(false);
+      return;
+    }
     itemNameDebounceRef.current = setTimeout(async () => {
       try {
         setIsTranslatingItemName(true);
         const en = await translateThaiToEnglish(val);
-        if (en) {
+        if (en && itemNameReqIdRef.current === reqId) {
           setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
         }
       } catch (err) {
         console.error('Translation error:', err);
       } finally {
-        setIsTranslatingItemName(false);
+        if (itemNameReqIdRef.current === reqId) {
+          setIsTranslatingItemName(false);
+        }
       }
-    }, 500);
+    }, 400);
   };
 
   const handleTriggerItemNameTranslate = async () => {
     if (!editingItem?.name.th.trim()) return;
+    if (itemNameDebounceRef.current) clearTimeout(itemNameDebounceRef.current);
+    const reqId = ++itemNameReqIdRef.current;
     setIsTranslatingItemName(true);
     try {
       const en = await translateThaiToEnglish(editingItem.name.th);
-      if (en) {
+      if (en && itemNameReqIdRef.current === reqId) {
         setEditingItem(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
       }
     } catch (err) {
       console.error('Translation error:', err);
     } finally {
-      setIsTranslatingItemName(false);
+      if (itemNameReqIdRef.current === reqId) {
+        setIsTranslatingItemName(false);
+      }
     }
   };
 
-  const handleDishThaiDescChange = (val: string) => {
-    setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, th: val } } : null);
-    if (itemDescDebounceRef.current) clearTimeout(itemDescDebounceRef.current);
-    if (!val.trim()) return;
-    itemDescDebounceRef.current = setTimeout(async () => {
+  const handleMainOptionThaiNameChange = (optId: string, val: string) => {
+    setEditingItem(prev => {
+      if (!prev) return null;
+      const current = (prev.mainOptions && prev.mainOptions.length > 0)
+        ? prev.mainOptions
+        : getDefaultMainOptions(prev);
+      return {
+        ...prev,
+        mainOptions: current.map(o => o.id === optId ? { ...o, name: { ...o.name, th: val } } : o),
+      };
+    });
+
+    if (mainOptDebounceMapRef.current[optId]) {
+      clearTimeout(mainOptDebounceMapRef.current[optId]);
+    }
+    const reqId = (mainOptReqIdMapRef.current[optId] || 0) + 1;
+    mainOptReqIdMapRef.current[optId] = reqId;
+
+    if (!val.trim()) {
+      setTranslatingMainOptId(prev => prev === optId ? null : prev);
+      return;
+    }
+
+    mainOptDebounceMapRef.current[optId] = setTimeout(async () => {
       try {
-        setIsTranslatingItemDesc(true);
+        setTranslatingMainOptId(optId);
         const en = await translateThaiToEnglish(val);
-        if (en) {
-          setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, en } } : null);
+        if (en && mainOptReqIdMapRef.current[optId] === reqId) {
+          setEditingItem(prev => {
+            if (!prev) return null;
+            const current = (prev.mainOptions && prev.mainOptions.length > 0)
+              ? prev.mainOptions
+              : getDefaultMainOptions(prev);
+            return {
+              ...prev,
+              mainOptions: current.map(o => o.id === optId ? { ...o, name: { ...o.name, en } } : o),
+            };
+          });
         }
       } catch (err) {
-        console.error('Translation error:', err);
+        console.error('Main option translation error:', err);
       } finally {
-        setIsTranslatingItemDesc(false);
+        if (mainOptReqIdMapRef.current[optId] === reqId) {
+          setTranslatingMainOptId(prev => prev === optId ? null : prev);
+        }
       }
-    }, 600);
+    }, 400);
   };
 
-  const handleTriggerItemDescTranslate = async () => {
-    if (!editingItem?.description.th.trim()) return;
-    setIsTranslatingItemDesc(true);
+  const handleTriggerMainOptionTranslate = async (optId: string, thaiVal: string) => {
+    if (!thaiVal.trim()) return;
+    if (mainOptDebounceMapRef.current[optId]) {
+      clearTimeout(mainOptDebounceMapRef.current[optId]);
+    }
+    const reqId = (mainOptReqIdMapRef.current[optId] || 0) + 1;
+    mainOptReqIdMapRef.current[optId] = reqId;
+    setTranslatingMainOptId(optId);
     try {
-      const en = await translateThaiToEnglish(editingItem.description.th);
-      if (en) {
-        setEditingItem(prev => prev ? { ...prev, description: { ...prev.description, en } } : null);
+      const en = await translateThaiToEnglish(thaiVal);
+      if (en && mainOptReqIdMapRef.current[optId] === reqId) {
+        setEditingItem(prev => {
+          if (!prev) return null;
+          const current = (prev.mainOptions && prev.mainOptions.length > 0)
+            ? prev.mainOptions
+            : getDefaultMainOptions(prev);
+          return {
+            ...prev,
+            mainOptions: current.map(o => o.id === optId ? { ...o, name: { ...o.name, en } } : o),
+          };
+        });
       }
     } catch (err) {
-      console.error('Translation error:', err);
+      console.error('Main option translation error:', err);
     } finally {
-      setIsTranslatingItemDesc(false);
+      if (mainOptReqIdMapRef.current[optId] === reqId) {
+        setTranslatingMainOptId(prev => prev === optId ? null : prev);
+      }
     }
   };
 
   const handleCatThaiNameChange = (val: string) => {
     setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
     if (catNameDebounceRef.current) clearTimeout(catNameDebounceRef.current);
-    if (!val.trim()) return;
+    const reqId = ++catNameReqIdRef.current;
+    if (!val.trim()) {
+      setIsTranslatingCatName(false);
+      return;
+    }
     catNameDebounceRef.current = setTimeout(async () => {
       try {
         setIsTranslatingCatName(true);
         const en = await translateThaiToEnglish(val);
-        if (en) {
+        if (en && catNameReqIdRef.current === reqId) {
           setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
         }
       } catch (err) {
         console.error('Translation error:', err);
       } finally {
-        setIsTranslatingCatName(false);
+        if (catNameReqIdRef.current === reqId) {
+          setIsTranslatingCatName(false);
+        }
       }
-    }, 500);
+    }, 400);
   };
 
   const handleTriggerCatTranslate = async () => {
     if (!editingCategory?.name.th.trim()) return;
+    if (catNameDebounceRef.current) clearTimeout(catNameDebounceRef.current);
+    const reqId = ++catNameReqIdRef.current;
     setIsTranslatingCatName(true);
     try {
       const en = await translateThaiToEnglish(editingCategory.name.th);
-      if (en) {
+      if (en && catNameReqIdRef.current === reqId) {
         setEditingCategory(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
       }
     } catch (err) {
       console.error('Translation error:', err);
     } finally {
-      setIsTranslatingCatName(false);
+      if (catNameReqIdRef.current === reqId) {
+        setIsTranslatingCatName(false);
+      }
     }
   };
 
   const handleGroupThaiNameChange = (val: string) => {
     setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, th: val } } : null);
     if (groupNameDebounceRef.current) clearTimeout(groupNameDebounceRef.current);
-    if (!val.trim()) return;
+    const reqId = ++groupNameReqIdRef.current;
+    if (!val.trim()) {
+      setIsTranslatingGroupName(false);
+      return;
+    }
     groupNameDebounceRef.current = setTimeout(async () => {
       try {
         setIsTranslatingGroupName(true);
         const en = await translateThaiToEnglish(val);
-        if (en) {
+        if (en && groupNameReqIdRef.current === reqId) {
           setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
         }
       } catch (err) {
         console.error('Translation error:', err);
       } finally {
-        setIsTranslatingGroupName(false);
+        if (groupNameReqIdRef.current === reqId) {
+          setIsTranslatingGroupName(false);
+        }
       }
-    }, 500);
+    }, 400);
   };
 
   const handleTriggerGroupTranslate = async () => {
     if (!editingGroup?.name.th.trim()) return;
+    if (groupNameDebounceRef.current) clearTimeout(groupNameDebounceRef.current);
+    const reqId = ++groupNameReqIdRef.current;
     setIsTranslatingGroupName(true);
     try {
       const en = await translateThaiToEnglish(editingGroup.name.th);
-      if (en) {
+      if (en && groupNameReqIdRef.current === reqId) {
         setEditingGroup(prev => prev ? { ...prev, name: { ...prev.name, en } } : null);
       }
     } catch (err) {
       console.error('Translation error:', err);
     } finally {
-      setIsTranslatingGroupName(false);
+      if (groupNameReqIdRef.current === reqId) {
+        setIsTranslatingGroupName(false);
+      }
     }
   };
 
@@ -352,13 +441,19 @@ export const OwnerDashboard: React.FC = () => {
     if (optDebounceMapRef.current[optId]) {
       clearTimeout(optDebounceMapRef.current[optId]);
     }
-    if (!val.trim()) return;
+    const reqId = (optReqIdMapRef.current[optId] || 0) + 1;
+    optReqIdMapRef.current[optId] = reqId;
+
+    if (!val.trim()) {
+      setTranslatingOptId(prev => prev === optId ? null : prev);
+      return;
+    }
 
     optDebounceMapRef.current[optId] = setTimeout(async () => {
       try {
         setTranslatingOptId(optId);
         const en = await translateThaiToEnglish(val);
-        if (en) {
+        if (en && optReqIdMapRef.current[optId] === reqId) {
           setEditingGroup(prev => {
             if (!prev) return null;
             const newOpts = [...prev.options];
@@ -372,9 +467,147 @@ export const OwnerDashboard: React.FC = () => {
       } catch (err) {
         console.error('Translation error:', err);
       } finally {
-        setTranslatingOptId(null);
+        if (optReqIdMapRef.current[optId] === reqId) {
+          setTranslatingOptId(prev => prev === optId ? null : prev);
+        }
+      }
+    }, 400);
+  };
+
+  const handleTriggerOptionTranslate = async (optId: string, thaiVal: string) => {
+    if (!thaiVal.trim()) return;
+    if (optDebounceMapRef.current[optId]) {
+      clearTimeout(optDebounceMapRef.current[optId]);
+    }
+    const reqId = (optReqIdMapRef.current[optId] || 0) + 1;
+    optReqIdMapRef.current[optId] = reqId;
+    setTranslatingOptId(optId);
+    try {
+      const en = await translateThaiToEnglish(thaiVal);
+      if (en && optReqIdMapRef.current[optId] === reqId) {
+        setEditingGroup(prev => {
+          if (!prev) return null;
+          const newOpts = [...prev.options];
+          const targetIdx = newOpts.findIndex(o => o.id === optId);
+          if (targetIdx >= 0) {
+            newOpts[targetIdx] = { ...newOpts[targetIdx], name: { ...newOpts[targetIdx].name, en } };
+          }
+          return { ...prev, options: newOpts };
+        });
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+    } finally {
+      if (optReqIdMapRef.current[optId] === reqId) {
+        setTranslatingOptId(prev => prev === optId ? null : prev);
+      }
+    }
+  };
+
+  const handleTaglineThaiChange = (val: string) => {
+    updateSettings({ taglineTh: val });
+    if (taglineDebounceRef.current) clearTimeout(taglineDebounceRef.current);
+    const reqId = ++taglineReqIdRef.current;
+    if (!val.trim()) {
+      setIsTranslatingTagline(false);
+      return;
+    }
+    taglineDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingTagline(true);
+        const en = await translateThaiToEnglish(val);
+        if (en && taglineReqIdRef.current === reqId) {
+          updateSettings({ taglineEn: en });
+        }
+      } catch (err) {
+        console.error('Tagline translation error:', err);
+      } finally {
+        if (taglineReqIdRef.current === reqId) {
+          setIsTranslatingTagline(false);
+        }
       }
     }, 500);
+  };
+
+  const handleTriggerTaglineTranslate = async () => {
+    const val = settings.taglineTh || '';
+    if (!val.trim()) return;
+    if (taglineDebounceRef.current) clearTimeout(taglineDebounceRef.current);
+    const reqId = ++taglineReqIdRef.current;
+    setIsTranslatingTagline(true);
+    try {
+      const en = await translateThaiToEnglish(val);
+      if (en && taglineReqIdRef.current === reqId) {
+        updateSettings({ taglineEn: en });
+      }
+    } catch (err) {
+      console.error('Tagline translation error:', err);
+    } finally {
+      if (taglineReqIdRef.current === reqId) {
+        setIsTranslatingTagline(false);
+      }
+    }
+  };
+
+  const handleEmergencyThaiChange = (val: string) => {
+    updateSettings({
+      emergencyClose: {
+        ...settings.emergencyClose,
+        reasonTh: val,
+      },
+    });
+    if (emergencyDebounceRef.current) clearTimeout(emergencyDebounceRef.current);
+    const reqId = ++emergencyReqIdRef.current;
+    if (!val.trim()) {
+      setIsTranslatingEmergency(false);
+      return;
+    }
+    emergencyDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsTranslatingEmergency(true);
+        const en = await translateThaiToEnglish(val);
+        if (en && emergencyReqIdRef.current === reqId) {
+          updateSettings({
+            emergencyClose: {
+              ...settings.emergencyClose,
+              reasonTh: val,
+              reasonEn: en,
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Emergency reason translation error:', err);
+      } finally {
+        if (emergencyReqIdRef.current === reqId) {
+          setIsTranslatingEmergency(false);
+        }
+      }
+    }, 500);
+  };
+
+  const handleTriggerEmergencyTranslate = async () => {
+    const val = settings.emergencyClose.reasonTh || '';
+    if (!val.trim()) return;
+    if (emergencyDebounceRef.current) clearTimeout(emergencyDebounceRef.current);
+    const reqId = ++emergencyReqIdRef.current;
+    setIsTranslatingEmergency(true);
+    try {
+      const en = await translateThaiToEnglish(val);
+      if (en && emergencyReqIdRef.current === reqId) {
+        updateSettings({
+          emergencyClose: {
+            ...settings.emergencyClose,
+            reasonEn: en,
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Emergency reason translation error:', err);
+    } finally {
+      if (emergencyReqIdRef.current === reqId) {
+        setIsTranslatingEmergency(false);
+      }
+    }
   };
 
   if (!isOwnerMode) return null;
@@ -481,27 +714,44 @@ export const OwnerDashboard: React.FC = () => {
   // ----------------------------------------------------
   // MENU ITEM CRUD OPERATIONS
   // ----------------------------------------------------
-  const handleSaveMenuItem = (item: MenuItem) => {
+  const handleSaveMenuItem = async (item: MenuItem) => {
     const rawOptions = (item.mainOptions && item.mainOptions.length > 0)
       ? item.mainOptions
       : getDefaultMainOptions(item);
 
-    const safeMainOptions: MainOption[] = rawOptions.map((opt, idx) => ({
-      id: opt.id || `opt_${Date.now()}_${idx}`,
-      name: {
-        th: opt.name?.th?.trim() || opt.name?.en?.trim() || `ตัวเลือก ${idx + 1}`,
-        en: opt.name?.en?.trim() || opt.name?.th?.trim() || `Option ${idx + 1}`,
-      },
-      priceAdjustment: typeof opt.priceAdjustment === 'number' ? opt.priceAdjustment : Number(opt.priceAdjustment) || 0,
-      availability: opt.availability || 'available',
-      displayOrder: idx + 1,
-    }));
+    const thDish = item.name?.th?.trim() || '';
+    let enDish = item.name?.en?.trim() || '';
+    if (thDish && containsThai(thDish) && (!enDish || enDish === 'Untitled' || containsThai(enDish))) {
+      const translatedDish = await translateThaiToEnglish(thDish);
+      if (translatedDish) enDish = translatedDish;
+    }
+
+    const safeMainOptions: MainOption[] = await Promise.all(
+      rawOptions.map(async (opt, idx) => {
+        const thOpt = opt.name?.th?.trim() || '';
+        let enOpt = opt.name?.en?.trim() || '';
+        if (thOpt && containsThai(thOpt) && (!enOpt || enOpt === 'New Option' || enOpt === 'Untitled Option' || containsThai(enOpt))) {
+          const translatedOpt = await translateThaiToEnglish(thOpt);
+          if (translatedOpt) enOpt = translatedOpt;
+        }
+        return {
+          id: opt.id || `opt_${Date.now()}_${idx}`,
+          name: {
+            th: thOpt || enOpt || `ตัวเลือก ${idx + 1}`,
+            en: enOpt || thOpt || `Option ${idx + 1}`,
+          },
+          priceAdjustment: typeof opt.priceAdjustment === 'number' ? opt.priceAdjustment : Number(opt.priceAdjustment) || 0,
+          availability: opt.availability || 'available',
+          displayOrder: idx + 1,
+        };
+      })
+    );
 
     const safeItem: MenuItem = {
       ...item,
       name: {
-        th: item.name?.th?.trim() || item.name?.en?.trim() || 'Untitled',
-        en: item.name?.en?.trim() || item.name?.th?.trim() || 'Untitled',
+        th: thDish || enDish || 'Untitled',
+        en: enDish || thDish || 'Untitled',
       },
       description: {
         th: item.description?.th || '',
@@ -675,12 +925,19 @@ export const OwnerDashboard: React.FC = () => {
   // ----------------------------------------------------
   // CATEGORY CRUD OPERATIONS
   // ----------------------------------------------------
-  const handleSaveCategory = (cat: Category) => {
+  const handleSaveCategory = async (cat: Category) => {
+    const thCat = cat.name?.th?.trim() || '';
+    let enCat = cat.name?.en?.trim() || '';
+    if (thCat && containsThai(thCat) && (!enCat || enCat === 'Untitled Category' || containsThai(enCat))) {
+      const translatedCat = await translateThaiToEnglish(thCat);
+      if (translatedCat) enCat = translatedCat;
+    }
+
     const safeCat: Category = {
       ...cat,
       name: {
-        th: cat.name?.th?.trim() || cat.name?.en?.trim() || 'Untitled Category',
-        en: cat.name?.en?.trim() || cat.name?.th?.trim() || 'Untitled Category',
+        th: thCat || enCat || 'Untitled Category',
+        en: enCat || thCat || 'Untitled Category',
       },
     };
 
@@ -727,20 +984,39 @@ export const OwnerDashboard: React.FC = () => {
   // ----------------------------------------------------
   // MODIFIER GROUP & OPTION CRUD & ORDERING
   // ----------------------------------------------------
-  const handleSaveModifierGroup = (group: ModifierGroup) => {
+  const handleSaveModifierGroup = async (group: ModifierGroup) => {
+    const thGroup = group.name?.th?.trim() || '';
+    let enGroup = group.name?.en?.trim() || '';
+    if (thGroup && containsThai(thGroup) && (!enGroup || enGroup === 'Untitled Group' || containsThai(enGroup))) {
+      const translatedGroup = await translateThaiToEnglish(thGroup);
+      if (translatedGroup) enGroup = translatedGroup;
+    }
+
+    const safeOptions = await Promise.all(
+      group.options.map(async (opt) => {
+        const thOpt = opt.name?.th?.trim() || '';
+        let enOpt = opt.name?.en?.trim() || '';
+        if (thOpt && containsThai(thOpt) && (!enOpt || enOpt === 'New Option' || enOpt === 'Untitled Option' || containsThai(enOpt))) {
+          const translatedOpt = await translateThaiToEnglish(thOpt);
+          if (translatedOpt) enOpt = translatedOpt;
+        }
+        return {
+          ...opt,
+          name: {
+            th: thOpt || enOpt || 'Untitled Option',
+            en: enOpt || thOpt || 'Untitled Option',
+          },
+        };
+      })
+    );
+
     const safeGroup: ModifierGroup = {
       ...group,
       name: {
-        th: group.name?.th?.trim() || group.name?.en?.trim() || 'Untitled Group',
-        en: group.name?.en?.trim() || group.name?.th?.trim() || 'Untitled Group',
+        th: thGroup || enGroup || 'Untitled Group',
+        en: enGroup || thGroup || 'Untitled Group',
       },
-      options: group.options.map(opt => ({
-        ...opt,
-        name: {
-          th: opt.name?.th?.trim() || opt.name?.en?.trim() || 'Untitled Option',
-          en: opt.name?.en?.trim() || opt.name?.th?.trim() || 'Untitled Option',
-        },
-      })),
+      options: safeOptions,
     };
 
     if (isAddingGroup) {
@@ -2229,43 +2505,73 @@ export const OwnerDashboard: React.FC = () => {
                     </span>
                   </label>
 
-                  <div className="space-y-2 pt-2">
+                  <div className="space-y-3 pt-2">
                     <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                        English Closure Reason
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.emergencyClose.reasonEn}
-                        onChange={(e) => {
-                          updateSettings({
-                            emergencyClose: {
-                              ...settings.emergencyClose,
-                              reasonEn: e.target.value,
-                            },
-                          });
-                        }}
-                        className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                        Thai Closure Reason
+                      <label className="text-[11px] font-bold text-gray-800 flex items-center gap-1.5 mb-1">
+                        <span>สาเหตุการปิดร้านชั่วคราว (ภาษาไทย)</span>
+                        <span className="text-[10px] text-[#E65100] font-black px-1.5 py-0.2 bg-orange-50 rounded">ภาษาหลัก</span>
                       </label>
                       <input
                         type="text"
                         value={settings.emergencyClose.reasonTh}
-                        onChange={(e) => {
-                          updateSettings({
-                            emergencyClose: {
-                              ...settings.emergencyClose,
-                              reasonTh: e.target.value,
-                            },
-                          });
+                        onChange={(e) => handleEmergencyThaiChange(e.target.value)}
+                        onBlur={() => {
+                          const thVal = settings.emergencyClose.reasonTh?.trim() || '';
+                          const enVal = settings.emergencyClose.reasonEn?.trim() || '';
+                          if (thVal && (!enVal || containsThai(enVal))) {
+                            handleTriggerEmergencyTranslate();
+                          }
                         }}
-                        className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs"
+                        placeholder="เช่น ปิดร้านชั่วคราวเนื่องจากเหตุฉุกเฉิน, วัตถุดิบหมด..."
+                        className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#E65100] outline-hidden"
                       />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-gray-600">
+                          เหตุผลภาษาอังกฤษ (English Closure Reason)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleTriggerEmergencyTranslate}
+                          disabled={isTranslatingEmergency || !settings.emergencyClose.reasonTh.trim()}
+                          className="text-[10px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                        >
+                          {isTranslatingEmergency ? (
+                            <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                              <Sparkles className="w-3 h-3 animate-spin" />
+                              กำลังแปล...
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
+                              <Sparkles className="w-3 h-3 text-[#E65100]" />
+                              แปลอัตโนมัติ
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={settings.emergencyClose.reasonEn}
+                          onChange={(e) => {
+                            updateSettings({
+                              emergencyClose: {
+                                ...settings.emergencyClose,
+                                reasonEn: e.target.value,
+                              },
+                            });
+                          }}
+                          placeholder="Auto-translated to English (editable)"
+                          className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs focus:border-[#E65100] outline-hidden"
+                        />
+                        {isTranslatingEmergency && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2511,29 +2817,64 @@ export const OwnerDashboard: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="font-bold text-gray-600 block mb-1">
-                      {language === 'th' ? 'คำโปรยร้าน (อังกฤษ)' : 'Tagline (English)'}
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.taglineEn || ''}
-                      onChange={(e) => updateSettings({ taglineEn: e.target.value })}
-                      placeholder="Authentic Thai Flavors & Fast Ordering"
-                      className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-600 block mb-1">
-                      {language === 'th' ? 'คำโปรยร้าน (ไทย)' : 'Tagline (Thai)'}
+                    <label className="font-bold text-gray-700 flex items-center gap-1.5 mb-1">
+                      <span>{language === 'th' ? 'คำโปรยร้าน (ภาษาไทย)' : 'Tagline (Thai)'}</span>
+                      <span className="text-[10px] text-[#E65100] font-black px-1.5 py-0.2 bg-orange-50 rounded">ภาษาหลัก</span>
                     </label>
                     <input
                       type="text"
                       value={settings.taglineTh || ''}
-                      onChange={(e) => updateSettings({ taglineTh: e.target.value })}
+                      onChange={(e) => handleTaglineThaiChange(e.target.value)}
+                      onBlur={() => {
+                        const thVal = settings.taglineTh?.trim() || '';
+                        const enVal = settings.taglineEn?.trim() || '';
+                        if (thVal && (!enVal || containsThai(enVal))) {
+                          handleTriggerTaglineTranslate();
+                        }
+                      }}
                       placeholder="รสชาติไทยแท้ สั่งง่าย ส่งไว"
-                      className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 font-bold"
+                      className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 font-bold focus:bg-white focus:border-[#E65100] outline-hidden"
                     />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-gray-600">
+                        {language === 'th' ? 'คำโปรยร้าน (ภาษาอังกฤษ)' : 'Tagline (English)'}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleTriggerTaglineTranslate}
+                        disabled={isTranslatingTagline || !(settings.taglineTh || '').trim()}
+                        className="text-[10px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                      >
+                        {isTranslatingTagline ? (
+                          <span className="flex items-center gap-1 text-orange-600 animate-pulse">
+                            <Sparkles className="w-3 h-3 animate-spin" />
+                            กำลังแปล...
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 bg-orange-50 hover:bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200">
+                            <Sparkles className="w-3 h-3 text-[#E65100]" />
+                            แปลอัตโนมัติ
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={settings.taglineEn || ''}
+                        onChange={(e) => updateSettings({ taglineEn: e.target.value })}
+                        placeholder="Authentic Thai Flavors & Fast Ordering"
+                        className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 font-bold focus:bg-white focus:border-[#E65100] outline-hidden"
+                      />
+                      {isTranslatingTagline && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Sparkles className="w-3.5 h-3.5 text-[#E65100] animate-spin" />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -3143,26 +3484,10 @@ export const OwnerDashboard: React.FC = () => {
                             <input
                               type="text"
                               value={opt.name.th}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                handleUpdateMainOptionInEditingItem(opt.id, {
-                                  name: {
-                                    th: val,
-                                    en: opt.name.en,
-                                  },
-                                });
-                              }}
-                              onBlur={async () => {
-                                if (opt.name.th?.trim() && (!opt.name.en || opt.name.en === 'New Option' || opt.name.en === 'Untitled Option')) {
-                                  const translated = await translateThaiToEnglish(opt.name.th);
-                                  if (translated) {
-                                    handleUpdateMainOptionInEditingItem(opt.id, {
-                                      name: {
-                                        th: opt.name.th,
-                                        en: translated,
-                                      },
-                                    });
-                                  }
+                              onChange={(e) => handleMainOptionThaiNameChange(opt.id, e.target.value)}
+                              onBlur={() => {
+                                if (opt.name.th?.trim() && (!opt.name.en?.trim() || opt.name.en === 'New Option' || opt.name.en === 'Untitled Option' || containsThai(opt.name.en))) {
+                                  handleTriggerMainOptionTranslate(opt.id, opt.name.th);
                                 }
                               }}
                               placeholder="เช่น ธรรมดา, หมูสับ, กุ้งสด"
@@ -3172,9 +3497,24 @@ export const OwnerDashboard: React.FC = () => {
 
                           {/* English Name */}
                           <div className="sm:col-span-4">
-                            <label className="text-[10px] font-bold text-gray-500 block mb-0.5">
-                              {language === 'th' ? 'ชื่อภาษาอังกฤษ' : 'English Name'}
-                            </label>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <label className="text-[10px] font-bold text-gray-500">
+                                {language === 'th' ? 'ชื่อภาษาอังกฤษ' : 'English Name'}
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerMainOptionTranslate(opt.id, opt.name.th)}
+                                disabled={translatingMainOptId === opt.id || !opt.name.th?.trim()}
+                                className="text-[9px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 flex items-center gap-0.5 cursor-pointer"
+                                title="แปลภาษาอังกฤษอัตโนมัติ"
+                              >
+                                {translatingMainOptId === opt.id ? (
+                                  <span className="animate-pulse">กำลังแปล...</span>
+                                ) : (
+                                  <span>✨ แปล</span>
+                                )}
+                              </button>
+                            </div>
                             <input
                               type="text"
                               value={opt.name.en}
@@ -3564,6 +3904,11 @@ export const OwnerDashboard: React.FC = () => {
                 type="text"
                 value={editingCategory.name.th}
                 onChange={(e) => handleCatThaiNameChange(e.target.value)}
+                onBlur={() => {
+                  if (editingCategory.name.th?.trim() && (!editingCategory.name.en?.trim() || editingCategory.name.en === 'Untitled Category' || containsThai(editingCategory.name.en))) {
+                    handleTriggerCatTranslate();
+                  }
+                }}
                 placeholder="เช่น เมนูข้าว, ต้มยำ, เครื่องดื่ม..."
                 className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
               />
@@ -3653,6 +3998,11 @@ export const OwnerDashboard: React.FC = () => {
                   type="text"
                   value={editingGroup.name.th}
                   onChange={(e) => handleGroupThaiNameChange(e.target.value)}
+                  onBlur={() => {
+                    if (editingGroup.name.th?.trim() && (!editingGroup.name.en?.trim() || editingGroup.name.en === 'Untitled Group' || containsThai(editingGroup.name.en))) {
+                      handleTriggerGroupTranslate();
+                    }
+                  }}
                   placeholder="เช่น ระดับความเผ็ด, เลือกเนื้อสัตว์, ท็อปปิ้ง..."
                   className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 text-xs focus:bg-white focus:border-[#E65100] focus:ring-1 focus:ring-[#E65100]"
                 />
@@ -3757,6 +4107,11 @@ export const OwnerDashboard: React.FC = () => {
                             placeholder="เช่น เผ็ดน้อย, หมูกรอบ"
                             value={opt.name.th}
                             onChange={(e) => handleOptionThaiNameChange(optIdx, opt.id, e.target.value)}
+                            onBlur={() => {
+                              if (opt.name.th?.trim() && (!opt.name.en?.trim() || opt.name.en === 'New Option' || opt.name.en === 'Untitled Option' || containsThai(opt.name.en))) {
+                                handleTriggerOptionTranslate(opt.id, opt.name.th);
+                              }
+                            }}
                             className="w-full bg-white px-2 py-1.5 rounded-lg border border-gray-200 text-xs focus:border-[#E65100]"
                           />
                         </div>
@@ -3764,9 +4119,18 @@ export const OwnerDashboard: React.FC = () => {
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
                             <label className="text-[10px] text-gray-600 font-bold">ชื่อภาษาอังกฤษ</label>
-                            {translatingOptId === opt.id && (
-                              <span className="text-[9px] text-[#E65100] animate-pulse">กำลังแปล...</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleTriggerOptionTranslate(opt.id, opt.name.th)}
+                              disabled={translatingOptId === opt.id || !opt.name.th?.trim()}
+                              className="text-[9px] font-bold text-[#E65100] hover:text-[#D84315] disabled:opacity-40 cursor-pointer"
+                            >
+                              {translatingOptId === opt.id ? (
+                                <span className="animate-pulse">กำลังแปล...</span>
+                              ) : (
+                                <span>✨ แปล</span>
+                              )}
+                            </button>
                           </div>
                           <input
                             type="text"
