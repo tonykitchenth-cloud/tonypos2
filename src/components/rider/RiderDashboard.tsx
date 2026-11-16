@@ -20,6 +20,7 @@ import {
   Map,
 } from 'lucide-react';
 import { InteractiveMapModal } from '../customer/InteractiveMapModal';
+import { RiderInstallButton } from './RiderInstallButton';
 
 export const RiderDashboard: React.FC = () => {
   const { allOrders, language, t } = useRestaurant();
@@ -91,13 +92,13 @@ export const RiderDashboard: React.FC = () => {
     <div className="min-h-screen bg-neutral-950 text-neutral-100 pb-16 selection:bg-orange-500/30">
       {/* 1. Rider Top Banner / Header */}
       <header className="sticky top-0 z-40 bg-neutral-900/95 backdrop-blur-md border-b border-neutral-800 px-4 py-3 shadow-lg">
-        <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center text-neutral-950 shadow-md shadow-orange-500/20">
+        <div className="max-w-xl mx-auto flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center text-neutral-950 shadow-md shadow-orange-500/20 shrink-0">
               <Bike className="w-6 h-6 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-wider text-orange-400">
                   Rider Delivery View
                 </span>
@@ -106,25 +107,31 @@ export const RiderDashboard: React.FC = () => {
                   Live Sync
                 </span>
               </div>
-              <h1 className="text-base sm:text-lg font-black text-white leading-tight">
+              <h1 className="text-sm sm:text-lg font-black text-white leading-tight truncate">
                 {language === 'th' ? "Tony's Kitchen - ส่งอาหาร" : "Tony's Kitchen - Rider"}
               </h1>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-[10px] text-neutral-400 block font-semibold">
-              {language === 'th' ? 'ออเดอร์ต้องส่ง' : 'Active'}
-            </span>
-            <span className="text-xl font-mono font-black text-orange-400">
-              {activeDeliveryOrders.length}
-            </span>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <RiderInstallButton variant="header" />
+
+            <div className="text-right">
+              <span className="text-[10px] text-neutral-400 block font-semibold">
+                {language === 'th' ? 'ออเดอร์ต้องส่ง' : 'Active'}
+              </span>
+              <span className="text-xl font-mono font-black text-orange-400">
+                {activeDeliveryOrders.length}
+              </span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* 2. Main Content Container */}
       <main className="max-w-xl mx-auto p-4 space-y-4">
+        {/* Mobile App Install Banner (Android & iOS, auto-hidden when standalone) */}
+        <RiderInstallButton variant="banner" />
         {/* Success Alert Banner when order completed */}
         {justCompletedOrderId && (
           <div className="p-4 rounded-2xl bg-emerald-900/90 border border-emerald-500 text-white flex items-center gap-3 shadow-xl animate-fade-in">

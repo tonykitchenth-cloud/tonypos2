@@ -93,7 +93,7 @@ export function navigateTo(route: AppRoute) {
     route === 'owner'
       ? `${basePath}owner/`
       : route === 'rider'
-      ? `${basePath}rider`
+      ? `${basePath}rider/`
       : basePath;
 
   if (window.location.pathname !== targetPath || window.location.search) {
@@ -104,13 +104,13 @@ export function navigateTo(route: AppRoute) {
 
 /**
  * Returns a universal, direct shareable URL for delivery riders
- * that works seamlessly on GitHub Pages, custom domains, and local preview.
+ * pointing to the dedicated installable /rider/ PWA entry point.
  */
 export function getRiderShareUrl(): string {
-  if (typeof window === 'undefined') return '/?view=rider';
+  if (typeof window === 'undefined') return '/rider/';
   const origin = window.location.origin;
   const basePath = getBaseAppPath();
-  return `${origin}${basePath}?view=rider`;
+  return `${origin}${basePath}rider/`;
 }
 
 /**

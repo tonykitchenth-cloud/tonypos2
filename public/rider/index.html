@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Tony's Kitchen - Rider</title>
+    <meta name="description" content="Tony's Kitchen Delivery Rider Portal and Live Order Tracking." />
+
+    <script>
+      // 1. Calculate repository base path and /rider/ subpath dynamically
+      // Guarantees shared assets (./assets/*, icons) resolve from appBase
+      // while Rider manifest & Service Worker resolve cleanly inside riderBase (/tonypos2/rider/ or /rider/).
+      (function() {
+        var l = window.location;
+        var pathname = l.pathname;
+        var riderIdx = pathname.indexOf('/rider');
+        var appBase = '/';
+
+        if (riderIdx !== -1) {
+          appBase = pathname.slice(0, riderIdx + 1);
+        } else {
+          var isGitHub = l.hostname.endsWith('github.io');
+          var segments = pathname.split('/').filter(Boolean);
+          if (isGitHub && segments.length > 0 && segments[0] !== 'owner' && segments[0] !== 'rider') {
+            appBase = '/' + segments[0] + '/';
+          }
+        }
+
+        var riderBase = appBase + 'rider/';
+        document.write('<base href="' + appBase + '">');
+        window.__APP_BASE__ = appBase;
+        window.__RIDER_BASE__ = riderBase;
+      })();
+
+      // 2. Single Page App redirect handler for GitHub Pages
+      (function(l) {
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          var normalizedPath = decoded === '/rider' || decoded === '/rider/' ? '/rider/' : decoded.replace(/\/+$/, '');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + (normalizedPath || '/') + l.hash);
+        }
+      }(window.location));
+    </script>
+
+    <!-- PWA & Mobile Web App Meta (Dedicated Rider App for Android & iOS) -->
+    <meta name="theme-color" content="#E65100" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Tony's Rider" />
+    <link rel="manifest" href="./rider/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+    <link rel="shortcut icon" href="./favicon-32.png" />
+
+    <meta property="og:title" content="Tony's Kitchen - Rider" />
+    <meta property="og:description" content="Tony's Kitchen Delivery Rider App." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Early capture of Chromium PWA install prompt on Android before React hydration
+      window.__pwa_deferred_prompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__pwa_deferred_prompt = e;
+        window.dispatchEvent(new CustomEvent('pwa_prompt_captured'));
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__pwa_deferred_prompt = null;
+        window.dispatchEvent(new CustomEvent('pwa_app_installed'));
+      });
+
+      // Register dedicated Rider Service Worker strictly scoped to /rider/
+      if ('serviceWorker' in navigator) {
+        var isDevEnv = window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev');
+        if (isDevEnv) {
+          if (navigator.serviceWorker.controller) {
+            try {
+              navigator.serviceWorker.controller.postMessage({ type: 'PURGE_DEV_CACHE' });
+            } catch (e) {}
+          }
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var reg of registrations) {
+              reg.unregister();
+            }
+          });
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              if (keys.length > 0) {
+                Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                  if (!sessionStorage.getItem('__dev_cache_purged_rider_v1')) {
+                    sessionStorage.setItem('__dev_cache_purged_rider_v1', '1');
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          }
+        } else {
+          window.addEventListener('load', function() {
+            var riderBase = window.__RIDER_BASE__ || './rider/';
+            navigator.serviceWorker.register(riderBase + 'sw.js', { scope: riderBase }).catch(function(err) {
+              console.debug('Rider ServiceWorker registration notice:', err);
+            });
+          });
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-neutral-950 text-neutral-100 antialiased selection:bg-orange-500/30">
+    <div id="root"></div>
+
+    <script>
+      // Bootstrap the Tony's Kitchen SPA for the Rider view
+      (function() {
+        var isDev = window.location.port === '3000' || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev');
+        if (isDev) {
+          var script = document.createElement('script');
+          script.type = 'module';
+          script.src = '/src/main.tsx';
+          document.body.appendChild(script);
+        } else {
+          var appBase = window.__APP_BASE__ || '/';
+          fetch(appBase + 'index.html')
+            .then(function(res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.text();
+            })
+            .then(function(html) {
+              var parser = new DOMParser();
+              var doc = parser.parseFromString(html, 'text/html');
+
+              doc.querySelectorAll('link[rel="stylesheet"]').forEach(function(l) {
+                var href = l.getAttribute('href');
+                if (href && !document.querySelector('link[href="' + href + '"]')) {
+                  var linkEl = document.createElement('link');
+                  linkEl.rel = 'stylesheet';
+                  linkEl.href = href;
+                  document.head.appendChild(linkEl);
+                }
+              });
+
+              doc.querySelectorAll('script[type="module"]').forEach(function(s) {
+                var src = s.getAttribute('src');
+                if (src && src.indexOf('/src/main.tsx') === -1) {
+                  var scriptEl = document.createElement('script');
+                  scriptEl.type = 'module';
+                  scriptEl.crossOrigin = 'anonymous';
+                  scriptEl.src = src;
+                  document.body.appendChild(scriptEl);
+                }
+              });
+            })
+            .catch(function(err) {
+              console.warn('Direct bundle injection notice:', err);
+            });
+        }
+      })();
+    </script>
+  </body>
+</html>
