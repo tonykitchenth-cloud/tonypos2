@@ -17,6 +17,7 @@ import {
   acquireAccurateGpsFix,
   formatGeolocationError,
   resolveGeolocationErrorMessage,
+  isIOSDevice,
   GpsFixResult,
   toLatLng,
 } from '../../utils/geolocation';
@@ -73,6 +74,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   const userInteractedRef = useRef<boolean>(false);
   const manualLocateActiveRef = useRef<boolean>(false);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const gpsAbortRef = useRef<AbortController | null>(null);
 
   // Keep latest props in refs so opening effect doesn't re-create the Leaflet map on parent state ticks
   const initialCoordsRef = useRef({
@@ -171,19 +173,31 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     const needsAutoLocate = (!validInitial || Boolean(forceOpenLocate)) && !isViewOnly;
     if (needsAutoLocate) {
       setIsLocating(true);
+      if (gpsAbortRef.current) {
+        gpsAbortRef.current.abort();
+      }
+      const gpsController = new AbortController();
+      gpsAbortRef.current = gpsController;
 
       const applyGpsFix = (fix: GpsFixResult, isFinal: boolean) => {
         if (cancelled || manualLocateActiveRef.current) return;
+        // Skip panning to coarse >150m interim guesses so map doesn't flash to a wrong tower before real GPS locks
+        if (!isFinal && fix.accuracy > 150) {
+          setGpsAccuracyMeters(fix.accuracy);
+          return;
+        }
+
         resolvedLatLng = { lat: fix.lat, lng: fix.lng };
         setGpsAccuracyMeters(fix.accuracy);
         setHasRealLocation(true);
         setLocationError(null);
 
         if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
           updateLiveGpsDot(mapInstanceRef.current, fix.lat, fix.lng);
           if (!userInteractedRef.current) {
             const targetZoom = fix.accuracy <= 150 ? 18 : 16;
-            mapInstanceRef.current.setView([fix.lat, fix.lng], targetZoom, { animate: true });
+            mapInstanceRef.current.setView([fix.lat, fix.lng], targetZoom, { animate: isFinal });
             setCurrentCenter({ lat: fix.lat, lng: fix.lng });
           }
         } else {
@@ -192,12 +206,15 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
         if (isFinal) {
           setIsLocating(false);
-          if (fix.accuracy > 300) {
-            setLocationError(
-              isThai
-                ? `จับตำแหน่งคร่าวๆ (±${fix.accuracy} ม.) กรุณาค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้าน`
-                : `Approximate location (±${fix.accuracy}m). Search address or drag map to place exact pin.`
-            );
+          if (fix.accuracy > 200) {
+            const coarseMsg = isIOSDevice()
+              ? isThai
+                ? `ตำแหน่ง iOS คลาดเคลื่อน (±${fix.accuracy} ม.) กรุณาเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" หรือค้นหาสถานที่/เลื่อนหมุดบนแผนที่`
+                : `iOS location is approximate (±${fix.accuracy}m). Enable "Precise Location" in iPhone Settings or search/drag the pin.`
+              : isThai
+              ? `จับตำแหน่งคร่าวๆ (±${fix.accuracy} ม.) กรุณาค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้าน`
+              : `Approximate location (±${fix.accuracy}m). Search address or drag map to place exact pin.`;
+            setLocationError(coarseMsg);
           }
         }
       };
@@ -205,10 +222,11 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
       const gpsTask =
         parentPromise ||
         acquireAccurateGpsFix({
-          timeoutMs: 11000,
-          refineWindowMs: 2800,
+          timeoutMs: 14000,
+          refineWindowMs: 4200,
           targetAccuracyMeters: 25,
-          allowCoarseFallback: true,
+          allowCoarseFallback: !isIOSDevice(),
+          signal: gpsController.signal,
           onProgress: (fix) => applyGpsFix(fix, false),
         });
 
@@ -217,9 +235,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
           applyGpsFix(best, true);
         })
         .catch((err) => {
-          if (cancelled || manualLocateActiveRef.current) return;
+          if (cancelled || manualLocateActiveRef.current || err?.name === 'AbortError') return;
           setIsLocating(false);
-          if (!resolvedLatLng || (!validInitial && (seed?.accuracy ?? 0) > 300)) {
+          if (!resolvedLatLng || (!validInitial && (seed?.accuracy ?? 0) > 200)) {
             const fallbackMsg = formatGeolocationError(err, isThai);
             setLocationError(fallbackMsg);
             resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
@@ -313,6 +331,10 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      if (gpsAbortRef.current) {
+        gpsAbortRef.current.abort();
+        gpsAbortRef.current = null;
+      }
       if (searchAbortRef.current) {
         searchAbortRef.current.abort();
         searchAbortRef.current = null;
@@ -330,12 +352,14 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     if (!isOpen || isViewOnly || !initialGpsSeed || manualLocateActiveRef.current) return;
     const valid = toLatLng(initialGpsSeed.lat, initialGpsSeed.lng);
     if (!valid) return;
+    if ((initialGpsSeed.accuracy ?? 9999) > 150) return;
 
     setGpsAccuracyMeters(initialGpsSeed.accuracy ?? null);
     setHasRealLocation(true);
     setLocationError(null);
 
     if (mapInstanceRef.current) {
+      mapInstanceRef.current.invalidateSize();
       updateLiveGpsDot(mapInstanceRef.current, valid.lat, valid.lng);
       if (!userInteractedRef.current) {
         const targetZoom = (initialGpsSeed.accuracy ?? 999) <= 150 ? 18 : 16;
@@ -347,12 +371,18 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     }
   }, [isOpen, isViewOnly, initialGpsSeed]);
 
-  // Handle Current Location GPS Click (with iOS watchPosition accuracy refinement + coarse fallback)
+  // Handle Current Location GPS Click (pure high-accuracy CoreLocation on iOS without coarse downgrade)
   const handleLocateMe = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setLocationError(isThai ? 'อุปกรณ์ของคุณไม่รองรับการดึงพิกัด GPS' : 'Geolocation is not supported');
       return;
     }
+
+    if (gpsAbortRef.current) {
+      gpsAbortRef.current.abort();
+    }
+    const gpsController = new AbortController();
+    gpsAbortRef.current = gpsController;
 
     manualLocateActiveRef.current = true;
     userInteractedRef.current = false;
@@ -360,46 +390,59 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     setLocationError(null);
 
     acquireAccurateGpsFix({
-      timeoutMs: 12000,
-      refineWindowMs: 3200,
+      timeoutMs: 14000,
+      refineWindowMs: 4200,
       targetAccuracyMeters: 20,
-      allowCoarseFallback: true,
+      allowCoarseFallback: !isIOSDevice(),
+      signal: gpsController.signal,
       onProgress: (fix) => {
+        if (gpsController.signal.aborted) return;
         setGpsAccuracyMeters(fix.accuracy);
+        // Only jump camera during intermediate updates when fix is genuinely tight (<= 150m)
+        if (fix.accuracy > 150) return;
         setHasRealLocation(true);
         if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
           updateLiveGpsDot(mapInstanceRef.current, fix.lat, fix.lng);
           if (!userInteractedRef.current) {
-            mapInstanceRef.current.setView([fix.lat, fix.lng], fix.accuracy <= 150 ? 18 : 16, { animate: true });
+            mapInstanceRef.current.setView([fix.lat, fix.lng], 18, { animate: true });
             setCurrentCenter({ lat: fix.lat, lng: fix.lng });
           }
+        } else if (!userInteractedRef.current) {
+          setCurrentCenter({ lat: fix.lat, lng: fix.lng });
         }
       },
     })
       .then((best) => {
+        if (gpsController.signal.aborted) return;
         setIsLocating(false);
         setGpsAccuracyMeters(best.accuracy);
         setHasRealLocation(true);
         if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
           updateLiveGpsDot(mapInstanceRef.current, best.lat, best.lng);
           mapInstanceRef.current.setView([best.lat, best.lng], best.accuracy <= 150 ? 18 : 16, { animate: true });
         }
         setCurrentCenter({ lat: best.lat, lng: best.lng });
-        if (best.accuracy > 250) {
-          setLocationError(
-            isThai
-              ? `สัญญาณ GPS มีความคลาดเคลื่อนประมาณ ±${best.accuracy} ม. สามารถพิมพ์ค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้านได้`
-              : `GPS accuracy is approx. ±${best.accuracy}m. Search address or drag map to adjust.`
-          );
+        if (best.accuracy > 200) {
+          const coarseMsg = isIOSDevice()
+            ? isThai
+              ? `ตำแหน่ง iOS คลาดเคลื่อนประมาณ ±${best.accuracy} ม. กรุณาเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" ในตั้งค่า Safari หรือค้นหา/เลื่อนหมุดบนแผนที่`
+              : `iOS GPS accuracy ±${best.accuracy}m. Enable "Precise Location" in iPhone Settings or search/drag the pin.`
+            : isThai
+            ? `สัญญาณ GPS มีความคลาดเคลื่อนประมาณ ±${best.accuracy} ม. สามารถพิมพ์ค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้านได้`
+            : `GPS accuracy is approx. ±${best.accuracy}m. Search address or drag map to adjust.`;
+          setLocationError(coarseMsg);
         }
       })
       .catch((err) => {
+        if (gpsController.signal.aborted || err?.name === 'AbortError') return;
         setIsLocating(false);
         console.warn('Geolocation error:', err);
         const fallbackMsg = formatGeolocationError(err, isThai);
         setLocationError(fallbackMsg);
         resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
-          if (resolvedMsg !== fallbackMsg) {
+          if (!gpsController.signal.aborted && resolvedMsg !== fallbackMsg) {
             setLocationError(resolvedMsg);
           }
         });

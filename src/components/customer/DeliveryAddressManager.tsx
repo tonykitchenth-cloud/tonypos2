@@ -5,6 +5,7 @@ import {
   acquireAccurateGpsFix,
   formatGeolocationError,
   resolveGeolocationErrorMessage,
+  isIOSDevice,
   GpsFixResult,
   toLatLng,
 } from '../../utils/geolocation';
@@ -94,6 +95,7 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   const prefetchPromiseRef = useRef<Promise<GpsFixResult> | null>(null);
   const prefetchSettledRef = useRef<boolean>(false);
   const prefetchAccuracyRef = useRef<number>(9999);
+  const gpsAbortControllerRef = useRef<AbortController | null>(null);
 
   // Quick GPS detection state
   const [isLocating, setIsLocating] = useState<boolean>(false);
@@ -150,19 +152,25 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   const prefetchFormCurrentGps = (sessionId: number) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
+    if (gpsAbortControllerRef.current) {
+      gpsAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    gpsAbortControllerRef.current = controller;
+
     prefetchSettledRef.current = false;
     prefetchAccuracyRef.current = 9999;
 
     const applyFix = (fix: GpsFixResult) => {
-      if (formSessionRef.current !== sessionId) return;
+      if (formSessionRef.current !== sessionId || controller.signal.aborted) return;
       if (formPinSourceRef.current === 'manual' || formPinSourceRef.current === 'saved') return;
 
       prefetchAccuracyRef.current = fix.accuracy;
       setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
 
-      // Only auto-populate form pin when fix is reasonably accurate (<= 250m)
-      // so coarse ISP/cell guesses don't lock out real GPS when opening the map.
-      if (fix.accuracy <= 250) {
+      // Only auto-populate form pin when fix is genuinely accurate (<= 100m)
+      // so coarse iOS Wi-Fi/cell guesses don't lock out real GPS when opening the map.
+      if (fix.accuracy <= 100) {
         const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
         formPinSourceRef.current = 'auto';
         setFormLat(fix.lat);
@@ -172,10 +180,11 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     };
 
     const promise = acquireAccurateGpsFix({
-      timeoutMs: 11000,
-      refineWindowMs: 2800,
+      timeoutMs: 13000,
+      refineWindowMs: 4000,
       targetAccuracyMeters: 25,
-      allowCoarseFallback: true,
+      allowCoarseFallback: !isIOSDevice(),
+      signal: controller.signal,
       onProgress: (fix) => applyFix(fix),
     });
 
@@ -340,11 +349,18 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       ) {
         setPendingMapGpsPromise(prefetchPromiseRef.current);
       } else {
+        if (gpsAbortControllerRef.current) {
+          gpsAbortControllerRef.current.abort();
+        }
+        const controller = new AbortController();
+        gpsAbortControllerRef.current = controller;
+
         const directPromise = acquireAccurateGpsFix({
-          timeoutMs: 11000,
-          refineWindowMs: 2800,
+          timeoutMs: 14000,
+          refineWindowMs: 4200,
           targetAccuracyMeters: 25,
-          allowCoarseFallback: true,
+          allowCoarseFallback: !isIOSDevice(),
+          signal: controller.signal,
           onProgress: (fix) => {
             setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
           },
@@ -404,14 +420,21 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       return;
     }
 
+    if (gpsAbortControllerRef.current) {
+      gpsAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    gpsAbortControllerRef.current = controller;
+
     setIsLocating(true);
     setFormError(null);
 
     acquireAccurateGpsFix({
-      timeoutMs: 12000,
-      refineWindowMs: 3200,
-      targetAccuracyMeters: 25,
-      allowCoarseFallback: true,
+      timeoutMs: 14000,
+      refineWindowMs: 4200,
+      targetAccuracyMeters: 20,
+      allowCoarseFallback: !isIOSDevice(),
+      signal: controller.signal,
     })
       .then((fix) => {
         setIsLocating(false);
@@ -423,12 +446,15 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
           setFormLng(fix.lng);
           setFormMapsUrl(pinUrl);
           setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
-          if (fix.accuracy > 200) {
-            setFormError(
-              isThai
-                ? `จับสัญญาณได้แบบคลาดเคลื่อน ±${fix.accuracy} ม. แนะนำให้กด "เลื่อนหมุดในแผนที่" เพื่อปักให้ตรงจุด`
-                : `GPS accuracy ±${fix.accuracy}m. Tap "Adjust on Map" to verify exact pin.`
-            );
+          if (fix.accuracy > 150) {
+            const iosPreciseMsg = isIOSDevice()
+              ? isThai
+                ? `จับสัญญาณ iOS คลาดเคลื่อน ±${fix.accuracy} ม. กรุณาเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" ในตั้งค่า iPhone หรือกด "เลื่อนหมุดในแผนที่"`
+                : `iOS GPS accuracy ±${fix.accuracy}m. Enable "Precise Location" in iPhone Settings or tap "Adjust on Map".`
+              : isThai
+              ? `จับสัญญาณได้แบบคลาดเคลื่อน ±${fix.accuracy} ม. แนะนำให้กด "เลื่อนหมุดในแผนที่" เพื่อปักให้ตรงจุด`
+              : `GPS accuracy ±${fix.accuracy}m. Tap "Adjust on Map" to verify exact pin.`;
+            setFormError(iosPreciseMsg);
           }
         } else {
           const loc = { latitude: fix.lat, longitude: fix.lng, mapsUrl: pinUrl };

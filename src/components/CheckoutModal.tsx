@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { CustomerProfile, OrderType, OrderItemSnapshot } from '../types';
 import { formatCurrency } from '../utils/pricing';
-import { CreateOrderParams } from '../utils/orderSync';
+import { CreateOrderParams, createRestaurantOrder } from '../utils/orderSync';
 import { acquireAccurateGpsFix, toLatLng } from '../utils/geolocation';
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
 import { DeliveryAddressManager } from './customer/DeliveryAddressManager';
@@ -14,6 +14,7 @@ import {
   Banknote,
   Zap,
   Truck,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -33,6 +34,9 @@ export const CheckoutModal: React.FC = () => {
     setIsClosedModalOpen,
     setIsOrderConfirmationOpen,
     setPendingOrderToConfirm,
+    clearCart,
+    setActiveOrderId,
+    setIsOrderStatusOpen,
     t,
   } = useRestaurant();
 
@@ -66,6 +70,7 @@ export const CheckoutModal: React.FC = () => {
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const orderTypeRef = useRef<OrderType>(orderType);
   orderTypeRef.current = orderType;
   const gpsDataRef = useRef(gpsData);
@@ -111,26 +116,29 @@ export const CheckoutModal: React.FC = () => {
       setGpsData({});
     }
     setErrorMsg(null);
+    setIsSubmitting(false);
   }, [isCheckoutOpen]);
 
-  // Auto-acquire GPS in background when Delivery is active and no GPS pin exists yet
+  // Auto-acquire high-accuracy GPS in background when Delivery is active and no GPS pin exists yet
   useEffect(() => {
     if (!isCheckoutOpen || orderType !== 'delivery') return;
     if (toLatLng(gpsData.latitude, gpsData.longitude)) return;
 
     let cancelled = false;
+    const controller = new AbortController();
     acquireAccurateGpsFix({
-      timeoutMs: 9000,
-      refineWindowMs: 2500,
+      timeoutMs: 10000,
+      refineWindowMs: 3200,
       targetAccuracyMeters: 25,
-      allowCoarseFallback: true,
+      allowCoarseFallback: false,
+      signal: controller.signal,
     })
       .then((fix) => {
         if (cancelled) return;
         if (orderTypeRef.current !== 'delivery') return;
         if (toLatLng(gpsDataRef.current.latitude, gpsDataRef.current.longitude)) return;
-        // Avoid auto-saving very coarse (>500m) ISP/cell fixes as a permanent customer pin
-        if (fix.accuracy > 500) return;
+        // Avoid auto-saving coarse (>80m) Wi-Fi/cell guesses as a permanent customer pin
+        if (fix.accuracy > 80) return;
 
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
         const nextGps = {
@@ -156,6 +164,7 @@ export const CheckoutModal: React.FC = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [isCheckoutOpen, orderType, gpsData.latitude, gpsData.longitude, updateCustomerProfile]);
 
@@ -235,7 +244,9 @@ export const CheckoutModal: React.FC = () => {
     return true;
   };
 
-  const handleInAppOrderSubmit = () => {
+  const handleInAppOrderSubmit = async () => {
+    if (isSubmitting) return;
+
     // 1. Check store availability
     if (!storeAvailability.isOpen) {
       setIsClosedModalOpen(true);
@@ -317,10 +328,29 @@ export const CheckoutModal: React.FC = () => {
       clientToken,
     };
 
-    // Close checkout and open 60s confirmation modal
-    setPendingOrderToConfirm(orderParams);
-    setIsCheckoutOpen(false);
-    setIsOrderConfirmationOpen(true);
+    try {
+      setIsSubmitting(true);
+      setErrorMsg(null);
+
+      // Submit order directly to the restaurant without intermediate Confirm Your Order modal
+      const createdOrder = await createRestaurantOrder(orderParams);
+      clearCart();
+      setPendingOrderToConfirm(null);
+      setIsOrderConfirmationOpen(false);
+      setActiveOrderId(createdOrder.id);
+      setIsCheckoutOpen(false);
+      setIsOrderStatusOpen(true);
+    } catch (err: any) {
+      console.error('Failed to create order in Firestore:', err);
+      setErrorMsg(
+        err?.message ||
+          (language === 'th'
+            ? 'ส่งคำสั่งซื้อไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
+            : 'Failed to submit order. Please check network connection and try again.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -595,14 +625,21 @@ export const CheckoutModal: React.FC = () => {
             <button
               type="button"
               id="btn-send-order-inapp"
+              disabled={isSubmitting}
               onClick={handleInAppOrderSubmit}
-              className="w-full py-3.5 px-4 rounded-2xl bg-[#E65100] text-white font-extrabold text-sm hover:bg-[#D84315] active:scale-[0.99] transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-2xl bg-[#E65100] text-white font-extrabold text-sm hover:bg-[#D84315] disabled:opacity-60 active:scale-[0.99] transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span className="bg-white/20 p-1 rounded-full text-white">
-                <Zap className="w-4 h-4 fill-white" />
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 fill-white" />
+                )}
               </span>
               <div className="text-left">
-                <div className="leading-tight">{t('sendOrderDirect')}</div>
+                <div className="leading-tight">
+                  {isSubmitting ? t('orderCreating') : t('sendOrderDirect')}
+                </div>
                 <div className="text-[10px] font-normal opacity-90 leading-tight">
                   {t('sendOrderDirectSubtitle')}
                 </div>

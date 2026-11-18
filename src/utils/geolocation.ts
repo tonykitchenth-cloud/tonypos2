@@ -237,18 +237,22 @@ export interface AcquireGpsOptions {
   refineWindowMs?: number;
   /** Stop immediately once accuracy reaches this threshold (meters) */
   targetAccuracyMeters?: number;
-  /** If true, fall back to OS/network location (enableHighAccuracy: false) when satellite GPS is slow (>2.2s) or unavailable indoors/desktop */
+  /** If true, fall back to OS/network location (enableHighAccuracy: false) when satellite GPS is slow (>2.2s) or unavailable on desktop/non-iOS */
   allowCoarseFallback?: boolean;
   /** Optional progress callback whenever a better fix arrives */
   onProgress?: (fix: GpsFixResult) => void;
+  /** Optional AbortSignal to cancel watchPosition and timers cleanly */
+  signal?: AbortSignal;
 }
 
 /**
  * iOS-safe high-accuracy GPS acquisition.
- * Prioritizes fresh satellite watchPosition (enableHighAccuracy: true, maximumAge: 0) first
- * to avoid stale OS cache collisions; if allowCoarseFallback is enabled and satellite GPS
- * hasn't responded within 2.2s (or reports POSITION_UNAVAILABLE indoors/desktop), triggers a
- * network/Wi-Fi getCurrentPosition fallback without cutting off satellite refinement.
+ * - Uses fresh watchPosition (enableHighAccuracy: true, maximumAge: 0).
+ * - On iOS (Safari / WKWebView / PWA), avoids calling enableHighAccuracy: false while
+ *   watchPosition is warming up, because iOS shares a single CoreLocation manager per tab
+ *   and enableHighAccuracy: false downgrades accuracy / returns cell-tower approximations.
+ * - Filters stale (>25s old) cached CoreLocation readings so old coordinates from an earlier
+ *   place don't overwrite the phone's current location.
  */
 export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<GpsFixResult> {
   const {
@@ -257,9 +261,19 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     targetAccuracyMeters = 25,
     allowCoarseFallback = false,
     onProgress,
+    signal,
   } = options;
 
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject({
+        code: 3,
+        name: 'AbortError',
+        message: 'Location request was aborted.',
+      });
+      return;
+    }
+
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       reject({
         code: 2,
@@ -268,15 +282,20 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       return;
     }
 
+    const ios = isIOSDevice();
+    const startedAt = Date.now();
+    const effectiveRefineWindowMs = ios ? Math.max(refineWindowMs, 4500) : refineWindowMs;
+
     let settled = false;
     let watchId: number | null = null;
     let bestFix: GpsFixResult | null = null;
+    let staleFallbackFix: GpsFixResult | null = null;
     let coarseFallbackFix: GpsFixResult | null = null;
     let coarseTriggered = false;
     let refineTimer: ReturnType<typeof setTimeout> | null = null;
     let coarseDelayTimer: ReturnType<typeof setTimeout> | null = null;
+    let delayedProgressTimer: ReturnType<typeof setTimeout> | null = null;
     let hardTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastError: GeolocationPositionError | null = null;
 
     const cleanup = () => {
       if (watchId !== null) {
@@ -293,11 +312,35 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
         clearTimeout(coarseDelayTimer);
         coarseDelayTimer = null;
       }
+      if (delayedProgressTimer !== null) {
+        clearTimeout(delayedProgressTimer);
+        delayedProgressTimer = null;
+      }
       if (hardTimer !== null) {
         clearTimeout(hardTimer);
         hardTimer = null;
       }
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
     };
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject({
+        code: 3,
+        name: 'AbortError',
+        message: 'Location request was aborted.',
+      });
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    let lastError: GeolocationPositionError | null = null;
 
     const parsePosition = (pos: GeolocationPosition): GpsFixResult | null => {
       const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
@@ -333,11 +376,15 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       };
     };
 
+    const isStaleReading = (timestamp: number): boolean => {
+      return timestamp > 1_000_000_000_000 && startedAt - timestamp > 25000;
+    };
+
     const finishWithBest = () => {
       if (settled) return;
       settled = true;
       cleanup();
-      const chosen = bestFix || coarseFallbackFix;
+      const chosen = bestFix || coarseFallbackFix || staleFallbackFix;
       if (chosen) {
         resolve(chosen);
       } else {
@@ -370,13 +417,13 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
             if (!coarseFallbackFix || candidate.accuracy <= coarseFallbackFix.accuracy) {
               coarseFallbackFix = candidate;
             }
-            if (!bestFix) {
+            if (!bestFix && (!ios || Date.now() - startedAt >= 4000)) {
               onProgress?.(candidate);
             }
           },
           (err) => {
             if (!lastError) lastError = err;
-            if (err.code === 1 && !bestFix && !coarseFallbackFix) {
+            if (err.code === 1 && !bestFix && !coarseFallbackFix && !staleFallbackFix) {
               settled = true;
               cleanup();
               reject(err);
@@ -395,8 +442,9 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       finishWithBest();
     }, timeoutMs);
 
-    if (allowCoarseFallback) {
-      // Wait 2.2s for real high-accuracy GPS before requesting network/OS fallback
+    // Only run the 2.2s coarse fallback timer on non-iOS devices (e.g. desktops without GPS hardware).
+    // On iOS, keep CoreLocation uninterrupted in high-accuracy mode so satellites can lock cleanly.
+    if (allowCoarseFallback && !ios) {
       coarseDelayTimer = setTimeout(() => {
         triggerCoarseFallback();
       }, 2200);
@@ -409,10 +457,32 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
           const candidate = parsePosition(pos);
           if (!candidate) return;
 
+          // Hold stale (>25s old) cached iOS CoreLocation coordinates aside unless timeout expires with nothing fresh
+          if (isStaleReading(candidate.timestamp)) {
+            if (!staleFallbackFix || candidate.accuracy <= staleFallbackFix.accuracy) {
+              staleFallbackFix = candidate;
+            }
+            return;
+          }
+
           const isBetter = !bestFix || candidate.accuracy <= bestFix.accuracy;
           if (isBetter) {
             bestFix = candidate;
-            onProgress?.(candidate);
+            if (candidate.accuracy <= 150 || Date.now() - startedAt >= 2500) {
+              if (delayedProgressTimer !== null) {
+                clearTimeout(delayedProgressTimer);
+                delayedProgressTimer = null;
+              }
+              onProgress?.(candidate);
+            } else if (delayedProgressTimer === null) {
+              const remaining = Math.max(0, 2500 - (Date.now() - startedAt));
+              delayedProgressTimer = setTimeout(() => {
+                delayedProgressTimer = null;
+                if (!settled && bestFix) {
+                  onProgress?.(bestFix);
+                }
+              }, remaining);
+            }
           }
 
           // If we achieved target GPS precision, resolve immediately!
@@ -421,11 +491,11 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
             return;
           }
 
-          // Otherwise start a short refinement window to let iOS GPS chip warm up
+          // Otherwise let CoreLocation / GPS chip warm up for effectiveRefineWindowMs
           if (refineTimer === null) {
             refineTimer = setTimeout(() => {
               finishWithBest();
-            }, refineWindowMs);
+            }, effectiveRefineWindowMs);
           }
         },
         (err) => {
@@ -437,11 +507,12 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
             reject(err);
             return;
           }
-          // If hardware high-accuracy is unavailable, try coarse fallback immediately if allowed
+          // On non-iOS (e.g. desktop PCs without GPS hardware), trigger coarse fallback immediately on code 2.
+          // On iOS, code 2 can happen briefly while CoreLocation initializes, so wait until near end of wait window.
           if (err.code === 2 && allowCoarseFallback && !bestFix) {
             if (coarseFallbackFix) {
               finishWithBest();
-            } else {
+            } else if (!ios || Date.now() - startedAt >= Math.min(4500, timeoutMs * 0.6)) {
               triggerCoarseFallback();
             }
           }
@@ -454,9 +525,9 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       );
     } catch (err) {
       cleanup();
-      if (coarseFallbackFix) {
+      if (coarseFallbackFix || staleFallbackFix) {
         settled = true;
-        resolve(coarseFallbackFix);
+        resolve((coarseFallbackFix || staleFallbackFix)!);
       } else {
         reject(err);
       }
