@@ -469,8 +469,8 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   };
 
   // Save the address form (Add or Edit)
-  const handleSaveForm = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveForm = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (!formAddressText.trim()) {
       setFormError(isThai ? 'กรุณาระบุรายละเอียดที่อยู่จัดส่ง' : 'Please enter delivery address details');
       return;
@@ -751,8 +751,8 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
               </button>
             </div>
 
-            {/* Modal Form Body */}
-            <form onSubmit={handleSaveForm} className="p-5 space-y-4 overflow-y-auto flex-1">
+            {/* Modal Form Body (div instead of nested form so CustomerProfileModal parent <form> stays valid HTML) */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               {formError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-bold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
@@ -797,6 +797,13 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
                     type="text"
                     value={formCustomLabel}
                     onChange={(e) => setFormCustomLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSaveForm();
+                      }
+                    }}
                     placeholder={isThai ? 'เช่น บ้านคุณแม่, โรงแรม, คาเฟ่' : "e.g. Mom's house, Hotel"}
                     className="w-full mt-2 p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] focus:outline-none focus:border-[#E65100]"
                   />
@@ -897,15 +904,16 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
                   {isThai ? 'ยกเลิก' : 'Cancel'}
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   id="btn-save-address-entry"
+                  onClick={handleSaveForm}
                   className="flex-1 py-3 px-4 rounded-xl bg-[#1A1A1A] hover:bg-black text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
                   <span>{isThai ? 'บันทึกที่อยู่นี้' : 'Save Address'}</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

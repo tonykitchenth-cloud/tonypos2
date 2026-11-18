@@ -407,8 +407,8 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   };
 
   // Search place/street/building on OpenStreetMap Nominatim (with Photon fallback inside Thailand)
-  const handlePlaceSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePlaceSearch = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     const q = searchQuery.trim();
     if (!q || isViewOnly) return;
 
@@ -608,7 +608,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
         {/* Inline Place / Address Search Bar (Customer Edit Mode) */}
         {!isViewOnly && (
           <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 relative z-30 shrink-0">
-            <form onSubmit={handlePlaceSearch} className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
@@ -618,6 +618,13 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     if (searchFeedback) setSearchFeedback(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePlaceSearch();
+                    }
                   }}
                   placeholder={
                     isThai
@@ -643,8 +650,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
               </div>
               <button
                 id="btn-map-place-search"
-                type="submit"
+                type="button"
                 disabled={isSearchingPlace || !searchQuery.trim()}
+                onClick={() => handlePlaceSearch()}
                 className="px-3 py-2 rounded-xl bg-[#1A1A1A] hover:bg-black disabled:bg-gray-300 text-white text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
               >
                 {isSearchingPlace ? (
@@ -654,7 +662,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
                 )}
                 <span>{isThai ? 'ค้นหา' : 'Find'}</span>
               </button>
-            </form>
+            </div>
 
             {searchFeedback && (
               <p className="text-[11px] text-amber-700 font-medium mt-1.5 px-1">
