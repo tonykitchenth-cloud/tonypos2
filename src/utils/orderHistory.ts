@@ -250,3 +250,126 @@ export function syncOwnerOrderHistory(orders: RestaurantOrder[]): RestaurantOrde
     return [];
   }
 }
+
+// ============================================================================
+// ORDER HISTORY DATE PERIOD FILTERING (LOCAL CALENDAR TIME)
+// ============================================================================
+
+export type OrderDatePeriod = 'today' | 'week' | 'month' | 'year' | 'all';
+
+/**
+ * Returns local calendar start/end millisecond bounds for the requested period.
+ * - today: Today 00:00:00.000 -> 23:59:59.999
+ * - week: Current Monday 00:00:00.000 -> Sunday 23:59:59.999
+ * - month: 1st of current month 00:00:00.000 -> last day of month 23:59:59.999
+ * - year: Jan 1 of current year 00:00:00.000 -> Dec 31 23:59:59.999
+ * - all: unbounded (null)
+ */
+export function getOrderDatePeriodBounds(
+  period: OrderDatePeriod,
+  referenceDate: Date = new Date()
+): { start: number | null; end: number | null } {
+  if (period === 'all') {
+    return { start: null, end: null };
+  }
+
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const day = referenceDate.getDate();
+
+  if (period === 'today') {
+    const start = new Date(year, month, day, 0, 0, 0, 0).getTime();
+    const end = new Date(year, month, day, 23, 59, 59, 999).getTime();
+    return { start, end };
+  }
+
+  if (period === 'week') {
+    const dayOfWeek = referenceDate.getDay(); // 0 = Sun, 1 = Mon, ...
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(year, month, day - diffToMonday, 0, 0, 0, 0);
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 23, 59, 59, 999);
+    return { start: monday.getTime(), end: sunday.getTime() };
+  }
+
+  if (period === 'month') {
+    const start = new Date(year, month, 1, 0, 0, 0, 0).getTime();
+    const end = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime();
+    return { start, end };
+  }
+
+  // period === 'year'
+  const start = new Date(year, 0, 1, 0, 0, 0, 0).getTime();
+  const end = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
+  return { start, end };
+}
+
+/**
+ * Checks whether an order timestamp falls within the selected OrderDatePeriod
+ * using local calendar boundaries.
+ */
+export function isOrderInDatePeriod(
+  dateValue: string | number | Date | undefined | null,
+  period: OrderDatePeriod,
+  referenceDate: Date = new Date()
+): boolean {
+  if (period === 'all') return true;
+  if (dateValue === undefined || dateValue === null || dateValue === '') return false;
+
+  const timestamp = dateValue instanceof Date ? dateValue.getTime() : new Date(dateValue).getTime();
+  if (Number.isNaN(timestamp)) return false;
+
+  const { start, end } = getOrderDatePeriodBounds(period, referenceDate);
+  if (start !== null && timestamp < start) return false;
+  if (end !== null && timestamp > end) return false;
+  return true;
+}
+
+/**
+ * Returns a human-readable date range label for UI display.
+ */
+export function getOrderDatePeriodRangeLabel(
+  period: OrderDatePeriod,
+  language: 'th' | 'en',
+  referenceDate: Date = new Date()
+): string {
+  const locale = language === 'th' ? 'th-TH' : 'en-US';
+  const { start, end } = getOrderDatePeriodBounds(period, referenceDate);
+
+  if (period === 'all' || start === null || end === null) {
+    return language === 'th' ? 'ประวัติทั้งหมด' : 'All records';
+  }
+
+  if (period === 'today') {
+    return new Date(start).toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  if (period === 'week') {
+    const startStr = new Date(start).toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'short',
+    });
+    const endStr = new Date(end).toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    return `${startStr} – ${endStr}`;
+  }
+
+  if (period === 'month') {
+    return new Date(start).toLocaleDateString(locale, {
+      month: 'long',
+      year: 'numeric',
+    });
+  }
+
+  // year
+  return new Date(start).toLocaleDateString(locale, {
+    year: 'numeric',
+  });
+}
+

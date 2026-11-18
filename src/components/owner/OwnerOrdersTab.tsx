@@ -20,6 +20,11 @@ import {
 } from '../../utils/soundAlarm';
 import { getRiderShareUrl } from '../../utils/navigation';
 import {
+  OrderDatePeriod,
+  isOrderInDatePeriod,
+  getOrderDatePeriodRangeLabel,
+} from '../../utils/orderHistory';
+import {
   Bell,
   Volume2,
   VolumeX,
@@ -46,6 +51,7 @@ import {
   ExternalLink,
   HardDrive,
   Navigation,
+  Calendar,
 } from 'lucide-react';
 import { OwnerOrderHistoryModal } from './OwnerOrderHistoryModal';
 import { POSPrinterModal } from './POSPrinterModal';
@@ -68,7 +74,7 @@ export const OwnerOrdersTab: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'pending_accepted' | 'on_the_way' | 'completed' | 'cancelled' | 'all'>('pending_accepted');
   const [typeFilter, setTypeFilter] = useState<'all' | 'pickup' | 'delivery'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeDateFilter, setActiveDateFilter] = useState<'today' | 'all'>('today');
+  const [activeDateFilter, setActiveDateFilter] = useState<OrderDatePeriod>('today');
 
   // Selected Order for Receipt Printing or Detailed Modal
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<RestaurantOrder | null>(null);
@@ -315,33 +321,62 @@ export const OwnerOrdersTab: React.FC = () => {
       (o) =>
         o.status === 'on_the_way' &&
         o.orderNumber !== 1027 &&
-        o.orderNumberFormatted !== '#1027'
+        o.orderNumberFormatted !== '#1027' &&
+        isOrderInDatePeriod(o.createdAt, activeDateFilter)
     ).length;
-  }, [allOrders]);
+  }, [allOrders, activeDateFilter]);
 
   const completedOrdersCount = useMemo(() => {
     return allOrders.filter(
-      (o) => o.status === 'completed' && o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027'
+      (o) =>
+        o.status === 'completed' &&
+        o.orderNumber !== 1027 &&
+        o.orderNumberFormatted !== '#1027' &&
+        isOrderInDatePeriod(o.createdAt, activeDateFilter)
     ).length;
-  }, [allOrders]);
+  }, [allOrders, activeDateFilter]);
 
   const cancelledOrdersCount = useMemo(() => {
-    return allOrders.filter((o) => o.status === 'cancelled').length;
-  }, [allOrders]);
+    return allOrders.filter(
+      (o) =>
+        o.status === 'cancelled' &&
+        isOrderInDatePeriod(o.createdAt, activeDateFilter)
+    ).length;
+  }, [allOrders, activeDateFilter]);
 
   const allOrdersCount = useMemo(() => {
-    return allOrders.filter((o) => o.orderNumber !== 1027 && o.orderNumberFormatted !== '#1027').length;
-  }, [allOrders]);
+    return allOrders.filter(
+      (o) =>
+        o.orderNumber !== 1027 &&
+        o.orderNumberFormatted !== '#1027' &&
+        (o.status === 'pending' ||
+          o.status === 'accepted' ||
+          isOrderInDatePeriod(o.createdAt, activeDateFilter))
+    ).length;
+  }, [allOrders, activeDateFilter]);
+
+  const periodSummary = useMemo(() => {
+    const completedInPeriod = allOrders.filter(
+      (o) =>
+        o.status === 'completed' &&
+        o.orderNumber !== 1027 &&
+        o.orderNumberFormatted !== '#1027' &&
+        isOrderInDatePeriod(o.createdAt, activeDateFilter)
+    );
+    const totalSales = completedInPeriod.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    return {
+      completedCount: completedInPeriod.length,
+      totalSales,
+      rangeLabel: getOrderDatePeriodRangeLabel(activeDateFilter, language),
+    };
+  }, [allOrders, activeDateFilter, language]);
 
   // Filter orders
   const filteredOrders = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-
     const result = allOrders.filter((order) => {
       // Date filter (active pending/accepted orders in the kitchen are always visible)
-      if (activeDateFilter === 'today' && order.status !== 'pending' && order.status !== 'accepted') {
-        const orderDate = new Date(order.createdAt).toISOString().split('T')[0];
-        if (orderDate !== today) return false;
+      if (order.status !== 'pending' && order.status !== 'accepted') {
+        if (!isOrderInDatePeriod(order.createdAt, activeDateFilter)) return false;
       }
 
       // Source filter
@@ -473,32 +508,31 @@ export const OwnerOrdersTab: React.FC = () => {
       {/* Filter Bar & Add External Order Action (Search input removed per owner request) */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Quick Date Toggle */}
-          <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800 shrink-0">
-            <button
-              id="filter-date-today"
-              type="button"
-              onClick={() => setActiveDateFilter('today')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                activeDateFilter === 'today'
-                  ? 'bg-orange-500 text-neutral-950'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              {t('todayOrders')}
-            </button>
-            <button
-              id="filter-date-all"
-              type="button"
-              onClick={() => setActiveDateFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                activeDateFilter === 'all'
-                  ? 'bg-orange-500 text-neutral-950'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              {t('allTimeOrders')}
-            </button>
+          {/* Quick Date Period Toggle */}
+          <div className="flex flex-wrap items-center gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800">
+            {(
+              [
+                { id: 'filter-date-today', value: 'today', label: t('dailyTodayOrders') },
+                { id: 'filter-date-week', value: 'week', label: t('weeklyOrders') },
+                { id: 'filter-date-month', value: 'month', label: t('monthlyOrders') },
+                { id: 'filter-date-year', value: 'year', label: t('yearlyOrders') },
+                { id: 'filter-date-all', value: 'all', label: t('allTimeOrders') },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                id={option.id}
+                type="button"
+                onClick={() => setActiveDateFilter(option.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                  activeDateFilter === option.value
+                    ? 'bg-orange-500 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -919,6 +953,20 @@ export const OwnerOrdersTab: React.FC = () => {
                 {type === 'all' ? t('all') : t(type)}
               </button>
             ))}
+          </div>
+          {/* Period History Summary Strip */}
+          <div className="ml-auto flex items-center gap-2 text-[11px] bg-neutral-950/80 border border-neutral-800 rounded-xl px-3 py-1.5">
+            <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+            <span className="text-neutral-400 font-medium">{periodSummary.rangeLabel}:</span>
+            <span className="font-bold text-emerald-400">
+              {language === 'th'
+                ? `เสร็จสิ้น ${periodSummary.completedCount} ออเดอร์`
+                : `${periodSummary.completedCount} completed`}
+            </span>
+            <span className="text-neutral-600">•</span>
+            <span className="font-mono font-extrabold text-orange-400">
+              ฿{periodSummary.totalSales.toLocaleString()}
+            </span>
           </div>
         </div>
       </div>

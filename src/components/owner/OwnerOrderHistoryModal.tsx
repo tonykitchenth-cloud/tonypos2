@@ -1,7 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { RestaurantOrder } from '../../types';
-import { getOwnerOrderHistory } from '../../utils/orderHistory';
+import {
+  getOwnerOrderHistory,
+  OrderDatePeriod,
+  isOrderInDatePeriod,
+  getOrderDatePeriodRangeLabel,
+} from '../../utils/orderHistory';
 import { posPrinterService } from '../../services/posPrinterService';
 import {
   X,
@@ -33,6 +38,7 @@ export const OwnerOrderHistoryModal: React.FC<OwnerOrderHistoryModalProps> = ({
 }) => {
   const { settings, language, t } = useRestaurant();
   const [searchQuery, setSearchQuery] = useState('');
+  const [periodFilter, setPeriodFilter] = useState<OrderDatePeriod>('all');
   const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState<RestaurantOrder | null>(null);
   const [historyOrders, setHistoryOrders] = useState<RestaurantOrder[]>(() => getOwnerOrderHistory());
 
@@ -55,15 +61,22 @@ export const OwnerOrderHistoryModal: React.FC<OwnerOrderHistoryModalProps> = ({
   }, []);
 
   const filteredHistory = useMemo(() => {
-    if (!searchQuery.trim()) return historyOrders;
     const q = searchQuery.toLowerCase().trim();
     return historyOrders.filter((order) => {
+      if (!isOrderInDatePeriod(order.createdAt, periodFilter)) return false;
+      if (!q) return true;
       const numMatch = (order.orderNumberFormatted || '').toLowerCase().includes(q);
       const nameMatch = (order.customer?.name || '').toLowerCase().includes(q);
       const phoneMatch = (order.customer?.phone || '').toLowerCase().includes(q);
       return numMatch || nameMatch || phoneMatch;
     });
-  }, [historyOrders, searchQuery]);
+  }, [historyOrders, searchQuery, periodFilter]);
+
+  const filteredPeriodTotal = useMemo(() => {
+    return filteredHistory
+      .filter((o) => o.status !== 'cancelled')
+      .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [filteredHistory]);
 
   if (!isOpen) return null;
 
@@ -122,8 +135,48 @@ export const OwnerOrderHistoryModal: React.FC<OwnerOrderHistoryModalProps> = ({
           </button>
         </div>
 
-        {/* Search Bar inside local ledger */}
-        <div className="p-3 sm:px-5 border-b border-neutral-800/80 bg-neutral-900/90 shrink-0">
+        {/* Search Bar & Period Filter inside local ledger */}
+        <div className="p-3 sm:px-5 border-b border-neutral-800/80 bg-neutral-900/90 shrink-0 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800">
+              {(
+                [
+                  { value: 'today', label: t('dailyTodayOrders') },
+                  { value: 'week', label: t('weeklyOrders') },
+                  { value: 'month', label: t('monthlyOrders') },
+                  { value: 'year', label: t('yearlyOrders') },
+                  { value: 'all', label: t('all') },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  id={`history-modal-period-${option.value}`}
+                  type="button"
+                  onClick={() => setPeriodFilter(option.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                    periodFilter === option.value
+                      ? 'bg-orange-500 text-neutral-950'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+              <Calendar className="w-3.5 h-3.5 text-orange-400" />
+              <span>{getOrderDatePeriodRangeLabel(periodFilter, language)}:</span>
+              <span className="font-bold text-white">
+                {filteredHistory.length} {language === 'th' ? 'รายการ' : 'orders'}
+              </span>
+              <span className="text-neutral-600">•</span>
+              <span className="font-mono font-bold text-orange-400">
+                ฿{filteredPeriodTotal.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
           <div className="relative">
             <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
