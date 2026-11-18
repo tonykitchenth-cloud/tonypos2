@@ -276,7 +276,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
           </div>
 
           {/* Scrollable Customization Body */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 overscroll-contain relative">
             {/* Dish Overview Card */}
             <div className="flex gap-3.5 bg-gray-50/70 p-3 rounded-2xl border border-gray-100">
               {activeItem.imageUrl && (
@@ -335,9 +335,19 @@ export const MenuItemCustomizerModal: React.FC = () => {
                     const priceDelta = opt.priceAdjustment || 0;
 
                     return (
-                      <label
+                      <button
                         key={opt.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border transition-all select-none ${
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        disabled={!isAvail}
+                        onClick={() => {
+                          if (isAvail) {
+                            setSelectedMainOptionId(opt.id);
+                            setValidationError(null);
+                          }
+                        }}
+                        className={`w-full text-left flex items-center justify-between p-3 rounded-xl border transition-all select-none touch-manipulation ${
                           !isAvail
                             ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
                             : isSelected
@@ -346,26 +356,13 @@ export const MenuItemCustomizerModal: React.FC = () => {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name={`main-option-${activeItem.id}`}
-                            value={opt.id}
-                            checked={isSelected}
-                            disabled={!isAvail}
-                            onChange={() => {
-                              if (isAvail) {
-                                setSelectedMainOptionId(opt.id);
-                                setValidationError(null);
-                              }
-                            }}
-                            className="sr-only"
-                          />
                           <div
                             className={`w-4.5 h-4.5 rounded-full flex items-center justify-center transition-colors shrink-0 ${
                               isSelected
                                 ? 'bg-[#E65100] border-2 border-[#E65100] text-white'
                                 : 'border border-gray-300 bg-white'
                             }`}
+                            aria-hidden="true"
                           >
                             {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
@@ -381,7 +378,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
                             <span className="text-gray-400 font-normal">{language === 'th' ? 'ไม่มีบวกเพิ่ม' : 'Included'}</span>
                           )}
                         </div>
-                      </label>
+                      </button>
                     );
                   })}
                 </div>
@@ -445,15 +442,22 @@ export const MenuItemCustomizerModal: React.FC = () => {
                         const optName = option.name?.[language] || option.name?.en || (typeof option.name === 'string' ? option.name : 'Option');
                         const priceDelta = option.priceAdjustment || 0;
                         const isRadio = group.maxSelections === 1;
-                        const inputId = `input-${option.id}`;
                         const optionRowId = `mod-option-${option.id}`;
 
                         return (
-                          <label
+                          <button
                             key={option.id}
                             id={optionRowId}
-                            htmlFor={inputId}
-                            className={`flex items-center justify-between p-3 rounded-xl border transition-all select-none ${
+                            type="button"
+                            role={isRadio ? 'radio' : 'checkbox'}
+                            aria-checked={isSelected}
+                            disabled={!isAvailable}
+                            onClick={() => {
+                              if (isAvailable) {
+                                handleOptionToggle(group, option);
+                              }
+                            }}
+                            className={`w-full text-left flex items-center justify-between p-3 rounded-xl border transition-all select-none touch-manipulation ${
                               !isAvailable
                                 ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
                                 : isSelected
@@ -462,22 +466,6 @@ export const MenuItemCustomizerModal: React.FC = () => {
                             }`}
                           >
                             <div className="flex items-center gap-3">
-                              {/* Form Input for native behavior, accessibility, & test automation */}
-                              <input
-                                type={isRadio ? 'radio' : 'checkbox'}
-                                id={inputId}
-                                name={`mod-group-${group.id}`}
-                                value={option.id}
-                                checked={isSelected}
-                                disabled={!isAvailable}
-                                onChange={() => {
-                                  if (isAvailable) {
-                                    handleOptionToggle(group, option);
-                                  }
-                                }}
-                                className="sr-only"
-                              />
-
                               {/* Custom Radio / Checkbox Indicator */}
                               <div
                                 className={`w-4.5 h-4.5 flex items-center justify-center transition-colors shrink-0 ${
@@ -520,7 +508,7 @@ export const MenuItemCustomizerModal: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                          </label>
+                          </button>
                         );
                       })}
                   </div>

@@ -51,6 +51,7 @@
         "customer": { "type": "object", "description": "Customer name, phone, delivery address, notes" },
         "items": { "type": "array", "description": "Immutable snapshot of ordered items with modifiers and prices" },
         "subtotal": { "type": "number", "description": "Subtotal amount in THB" },
+        "deliveryFee": { "type": "number", "description": "Optional delivery fee in THB for delivery orders" },
         "total": { "type": "number", "description": "Total amount in THB" },
         "currencySymbol": { "type": "string", "description": "Currency symbol (฿)" },
         "createdAt": { "type": "string", "description": "ISO timestamp of creation" },

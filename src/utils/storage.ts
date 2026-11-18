@@ -101,6 +101,7 @@ export function loadAppState(): AppStateData {
           ...defaultSettings.channels,
           ...(parsed.settings?.channels || {}),
         },
+        deliveryFee: Math.max(0, Number(parsed.settings?.deliveryFee) || 0),
       },
       categories: Array.isArray(parsed.categories) && parsed.categories.length > 0 
         ? parsed.categories 

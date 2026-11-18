@@ -42,6 +42,7 @@ export function createAppBackup(
       ...defaultSettings.channels,
       ...(state.settings?.channels || {}),
     },
+    deliveryFee: Math.max(0, Number(state.settings?.deliveryFee) || 0),
   };
 
   const cleanCategories: Category[] = Array.isArray(state.categories)

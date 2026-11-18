@@ -173,6 +173,7 @@ export interface RestaurantOrder {
   };
   items: OrderItemSnapshot[];
   subtotal: number;
+  deliveryFee?: number;
   total: number;
   currencySymbol: string;
   createdAt: string; // ISO string
@@ -254,6 +255,7 @@ export interface StoreSettings {
   taglineTh?: string;
   address?: string;
   defaultLanguage?: Language;
+  deliveryFee?: number;
 }
 
 export interface StoreAvailabilityResult {

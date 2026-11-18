@@ -175,6 +175,7 @@ export interface CreateOrderParams {
   };
   items: OrderItemSnapshot[];
   subtotal: number;
+  deliveryFee?: number;
   total: number;
   currencySymbol: string;
   clientToken: string;
@@ -294,6 +295,7 @@ export async function createRestaurantOrder(params: CreateOrderParams): Promise<
     },
     items: params.items,
     subtotal: params.subtotal,
+    ...(typeof params.deliveryFee === 'number' ? { deliveryFee: params.deliveryFee } : {}),
     total: params.total,
     currencySymbol: params.currencySymbol || '฿',
     createdAt: nowIso,

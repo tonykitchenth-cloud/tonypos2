@@ -1224,11 +1224,25 @@ export const OwnerOrdersTab: React.FC = () => {
               </div>
 
               {/* Total Summary */}
-              <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 flex items-center justify-between text-base">
-                <span className="font-bold text-neutral-400">{language === 'th' ? 'ยอดรวมทั้งหมด' : 'Grand Total'}:</span>
-                <span className="font-mono text-xl font-black text-orange-400">
-                  ฿{selectedOrderForDetail.total?.toLocaleString()}
-                </span>
+              <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5">
+                {selectedOrderForDetail.orderType === 'delivery' && (selectedOrderForDetail.deliveryFee ?? 0) > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-neutral-400">
+                      <span>{language === 'th' ? 'ค่าอาหาร' : 'Subtotal'}:</span>
+                      <span className="font-mono">฿{selectedOrderForDetail.subtotal?.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-orange-300 font-semibold pb-1.5 border-b border-neutral-800">
+                      <span>{language === 'th' ? 'ค่าบริการจัดส่ง' : 'Delivery Fee'}:</span>
+                      <span className="font-mono">+฿{selectedOrderForDetail.deliveryFee!.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between text-base">
+                  <span className="font-bold text-neutral-400">{language === 'th' ? 'ยอดรวมทั้งหมด' : 'Grand Total'}:</span>
+                  <span className="font-mono text-xl font-black text-orange-400">
+                    ฿{selectedOrderForDetail.total?.toLocaleString()}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1532,8 +1546,14 @@ export const OwnerOrdersTab: React.FC = () => {
               </div>
             ))}
           </div>
-          <div className="pt-2 text-right font-bold text-base">
-            TOTAL: ฿{selectedOrderForPrint.total}
+          <div className="pt-2 text-right font-bold text-base space-y-0.5">
+            {selectedOrderForPrint.orderType === 'delivery' && (selectedOrderForPrint.deliveryFee ?? 0) > 0 && (
+              <>
+                <div className="text-xs font-normal">Subtotal: ฿{selectedOrderForPrint.subtotal}</div>
+                <div className="text-xs font-normal">Delivery Fee: +฿{selectedOrderForPrint.deliveryFee}</div>
+              </>
+            )}
+            <div>TOTAL: ฿{selectedOrderForPrint.total}</div>
           </div>
         </div>
       )}

@@ -13,6 +13,7 @@ import {
   CreditCard,
   Banknote,
   Zap,
+  Truck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -208,6 +209,10 @@ export const CheckoutModal: React.FC = () => {
     updateCustomerProfile({ orderType: type });
   };
 
+  const configuredDeliveryFee = Math.max(0, Number(settings.deliveryFee) || 0);
+  const appliedDeliveryFee = orderType === 'delivery' ? configuredDeliveryFee : 0;
+  const grandTotal = cartSubtotal + appliedDeliveryFee;
+
   if (!isCheckoutOpen) return null;
 
   const validate = (): boolean => {
@@ -303,7 +308,8 @@ export const CheckoutModal: React.FC = () => {
       },
       items: itemSnapshots,
       subtotal: cartSubtotal,
-      total: cartSubtotal,
+      deliveryFee: appliedDeliveryFee,
+      total: grandTotal,
       currencySymbol: settings.currencySymbol || '฿',
       clientToken,
     };
@@ -404,6 +410,21 @@ export const CheckoutModal: React.FC = () => {
                   </p>
                 </button>
               </div>
+
+              {/* Delivery Fee Notice (Shown ONLY when Delivery is selected) */}
+              {orderType === 'delivery' && (
+                <div
+                  id="checkout-delivery-fee-notice"
+                  className="mt-2 px-3 py-2 rounded-xl bg-orange-50/90 border border-orange-200 flex items-center gap-2 text-xs text-[#E65100] font-bold"
+                >
+                  <Truck className="w-4 h-4 shrink-0 text-[#E65100]" />
+                  <span>
+                    {language === 'th'
+                      ? `มีค่าบริการจัดส่ง ${configuredDeliveryFee.toLocaleString()} บาท`
+                      : `Delivery fee: ${configuredDeliveryFee.toLocaleString()} THB`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Payment Method Selector: QR Payment (Left) vs Cash (Right) */}
@@ -546,10 +567,24 @@ export const CheckoutModal: React.FC = () => {
 
           {/* Checkout Footer Actions */}
           <div className="bg-white p-4 border-t border-gray-100 shadow-xl space-y-2.5 shrink-0">
+            {appliedDeliveryFee > 0 && (
+              <div className="space-y-1 text-xs border-b border-gray-100 pb-2">
+                <div className="flex items-center justify-between text-gray-500">
+                  <span>{t('subtotal')}:</span>
+                  <span className="font-semibold text-gray-700">
+                    {formatCurrency(cartSubtotal, settings.currencySymbol)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[#E65100] font-semibold">
+                  <span>{language === 'th' ? 'ค่าบริการจัดส่ง' : 'Delivery Fee'}:</span>
+                  <span>+{formatCurrency(appliedDeliveryFee, settings.currencySymbol)}</span>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between text-xs pb-1">
               <span className="font-bold text-gray-500">{t('total')}:</span>
               <span className="text-lg font-black text-[#1A1A1A]">
-                {formatCurrency(cartSubtotal, settings.currencySymbol)}
+                {formatCurrency(grandTotal, settings.currencySymbol)}
               </span>
             </div>
 

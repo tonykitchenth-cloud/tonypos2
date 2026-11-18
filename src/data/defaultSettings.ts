@@ -45,4 +45,5 @@ export const defaultSettings: StoreSettings = {
   taglineTh: "รสชาติไทยแท้ สั่งง่าย ส่งไว ปรุงสดใหม่ทุกจาน",
   address: "Bangkok, Thailand",
   defaultLanguage: "en",
+  deliveryFee: 0,
 };

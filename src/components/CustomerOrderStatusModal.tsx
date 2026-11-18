@@ -526,6 +526,19 @@ export const CustomerOrderStatusModal: React.FC<CustomerOrderStatusModalProps> =
                   ))}
                 </div>
 
+                {order.orderType === 'delivery' && (order.deliveryFee ?? 0) > 0 && (
+                  <div className="pt-2 border-t border-neutral-800/70 space-y-1 text-xs">
+                    <div className="flex justify-between items-center text-neutral-400">
+                      <span>{t('subtotal')}</span>
+                      <span className="font-mono">฿{order.subtotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-orange-300 font-semibold">
+                      <span>{language === 'th' ? 'ค่าบริการจัดส่ง' : 'Delivery Fee'}</span>
+                      <span className="font-mono">+฿{order.deliveryFee!.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-3 border-t border-neutral-800 flex justify-between items-center text-sm font-bold text-white">
                   <span>{t('total')}</span>
                   <span className="text-lg text-orange-400 font-mono">

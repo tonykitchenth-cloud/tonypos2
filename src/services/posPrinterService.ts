@@ -249,6 +249,9 @@ export class POSPrinterService {
 
     // 5. Total & Payment
     addKeyValue('Subtotal:', `THB ${(order.subtotal || order.total || 0).toLocaleString()}`);
+    if (order.orderType === 'delivery' && (order.deliveryFee ?? 0) > 0) {
+      addKeyValue('Delivery Fee:', `THB ${order.deliveryFee!.toLocaleString()}`);
+    }
     addBytes(0x1b, 0x45, 0x01); // Bold ON
     addBytes(0x1d, 0x21, 0x10); // Double width
     addKeyValue('TOTAL:', `THB ${(order.total || 0).toLocaleString()}`);

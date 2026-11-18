@@ -113,6 +113,7 @@ export function sanitizeAppState(data: any): AppStateData {
         ...defaultSettings.channels,
         ...(data.settings?.channels || {}),
       },
+      deliveryFee: Math.max(0, Number(data.settings?.deliveryFee) || 0),
     },
     categories: Array.isArray(data.categories) && data.categories.length > 0
       ? data.categories

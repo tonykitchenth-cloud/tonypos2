@@ -1,9 +1,13 @@
 // Tony's Kitchen Rider Service Worker
-const CACHE_NAME = 'tonys-kitchen-rider-v1';
+const CACHE_NAME = 'tonys-kitchen-rider-v2';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './rider-icon-192.png',
+  './rider-icon-512.png',
+  './rider-icon-maskable-512.png',
+  './rider-apple-touch-icon.png',
   '../index.html',
   '../pwa-192x192.png',
   '../pwa-512x512.png',

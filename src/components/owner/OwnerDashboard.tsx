@@ -2906,6 +2906,30 @@ export const OwnerDashboard: React.FC = () => {
 
                   <div>
                     <label className="font-bold text-gray-600 block mb-1">
+                      {language === 'th' ? 'ค่าบริการจัดส่ง Delivery (บาท)' : 'Delivery Fee (THB)'}
+                    </label>
+                    <input
+                      id="owner-settings-delivery-fee-input"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={settings.deliveryFee ?? 0}
+                      onChange={(e) => {
+                        const raw = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0);
+                        updateSettings({ deliveryFee: raw });
+                      }}
+                      placeholder="0"
+                      className="w-full bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 font-bold focus:bg-white focus:border-[#E65100] outline-hidden"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {language === 'th'
+                        ? 'แสดงแจ้งเตือนและบวกเพิ่มเฉพาะเมื่อลูกค้าเลือกจัดส่งแบบ Delivery (ใส่ 0 หากไม่มีค่าจัดส่ง)'
+                        : 'Shown and added only when customer selects Delivery (set 0 for free delivery).'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-gray-600 block mb-1">
                       {language === 'th' ? 'รหัสผ่านเจ้าของร้าน (Passcode)' : 'Owner Passcode'}
                     </label>
                     <input
@@ -3078,6 +3102,34 @@ export const OwnerDashboard: React.FC = () => {
                       </div>
                     </label>
                   ))}
+                </div>
+
+                {/* Delivery Fee Setting synced with Store Settings */}
+                <div className="p-4 bg-orange-50/50 border border-orange-200/80 rounded-2xl space-y-1.5 text-xs">
+                  <label htmlFor="owner-channels-delivery-fee-input" className="font-bold text-[#1A1A1A] block">
+                    {language === 'th' ? 'ค่าบริการจัดส่งแบบ Delivery (บาท)' : 'Delivery Service Fee (THB)'}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="owner-channels-delivery-fee-input"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={settings.deliveryFee ?? 0}
+                      onChange={(e) => {
+                        const raw = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0);
+                        updateSettings({ deliveryFee: raw });
+                      }}
+                      placeholder="0"
+                      className="w-36 bg-white px-3 py-2 rounded-xl border border-gray-200 font-bold text-[#1A1A1A] focus:border-[#E65100] outline-hidden"
+                    />
+                    <span className="text-xs font-bold text-gray-600">{language === 'th' ? 'บาท' : 'THB'}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {language === 'th'
+                      ? 'ระบบจะแจ้งข้อความค่าบริการจัดส่งนี้ให้ลูกค้าทราบเฉพาะเมื่อลูกค้าเลือกจัดส่งแบบ Delivery เท่านั้น'
+                      : 'Customers will see this delivery fee notice only when selecting Delivery.'}
+                  </p>
                 </div>
               </div>
             )}
