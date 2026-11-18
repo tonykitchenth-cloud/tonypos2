@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { CustomerProfile, OrderType } from '../types';
+import { CustomerProfile } from '../types';
 import { X, User, Phone, MapPin, Check, Save, Smartphone, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -42,7 +42,6 @@ export const CustomerProfileModal: React.FC = () => {
   const [name, setName] = useState<string>(customerProfile.name || '');
   const [phone, setPhone] = useState<string>(customerProfile.phone || '');
   const [address, setAddress] = useState<string>(customerProfile.deliveryAddress || '');
-  const [orderType, setOrderType] = useState<OrderType>(customerProfile.orderType || 'pickup');
   const [notes, setNotes] = useState<string>(customerProfile.notes || '');
   const [gpsData, setGpsData] = useState<{ latitude?: number; longitude?: number; mapsUrl?: string }>({
     latitude: customerProfile.currentLatitude,
@@ -58,7 +57,6 @@ export const CustomerProfileModal: React.FC = () => {
       setName(current.name || '');
       setPhone(current.phone || '');
       setAddress(current.deliveryAddress || '');
-      setOrderType(current.orderType || 'pickup');
       setNotes(current.notes || '');
       if (current.currentLatitude) {
         setGpsData({
@@ -74,11 +72,10 @@ export const CustomerProfileModal: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const updated: CustomerProfile = {
+    const updated: Partial<CustomerProfile> = {
       name: name.trim(),
       phone: phone.trim(),
       deliveryAddress: address.trim(),
-      orderType,
       notes: notes.trim(),
       currentLatitude: gpsData.latitude,
       currentLongitude: gpsData.longitude,
@@ -224,39 +221,6 @@ export const CustomerProfileModal: React.FC = () => {
                 mapsUrl={gpsData.mapsUrl}
                 onGpsChange={(gps) => setGpsData(gps)}
               />
-            </div>
-
-            {/* Default Order Method */}
-            <div>
-              <label className="font-bold text-gray-700 block mb-1">
-                {t('orderType')}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  id="profile-method-delivery"
-                  onClick={() => setOrderType('delivery')}
-                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
-                    orderType === 'delivery'
-                      ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
-                      : 'bg-gray-50 border-gray-200 text-gray-600'
-                  }`}
-                >
-                  {t('delivery')}
-                </button>
-                <button
-                  type="button"
-                  id="profile-method-pickup"
-                  onClick={() => setOrderType('pickup')}
-                  className={`py-2 px-3 rounded-xl border font-bold transition-all ${
-                    orderType === 'pickup'
-                      ? 'bg-orange-50 border-[#E65100] text-[#E65100]'
-                      : 'bg-gray-50 border-gray-200 text-gray-600'
-                  }`}
-                >
-                  {t('pickup')}
-                </button>
-              </div>
             </div>
 
             <p className="text-[10px] text-gray-400 text-center pt-1">

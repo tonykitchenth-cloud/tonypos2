@@ -82,46 +82,111 @@ export function extractCoordsFromMapsUrl(mapsUrl?: string): LatLngPoint | null {
 }
 
 /**
- * Formats actionable Thai/English geolocation error guidance, including iOS Precise Location hints.
+ * Detects whether the app is running inside an embedded iframe (e.g., preview or webview).
+ */
+export function isEmbeddedFrame(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Formats actionable Thai/English geolocation error guidance, including iOS Precise Location
+ * and iframe permissions-policy detection (avoids falsely claiming permission denied when blocked by frame policy).
  */
 export function formatGeolocationError(
   error: Pick<GeolocationPositionError, 'code' | 'message'> | null | undefined,
   isThai: boolean
 ): string {
   const ios = isIOSDevice();
+  const rawMsg = (error?.message || '').toLowerCase();
+
   if (!error) {
     return isThai
-      ? 'ไม่สามารถดึงตำแหน่ง GPS ได้ กรุณาเปิดบริการตำแหน่งที่ตั้ง'
-      : 'Unable to retrieve GPS location. Please enable location services.';
+      ? 'ไม่สามารถดึงตำแหน่ง GPS ได้ สามารถพิมพ์ค้นหาชื่อสถานที่บนแผนที่หรือเลื่อนหมุดได้ทันที'
+      : 'Unable to retrieve GPS location. You can search your place or drag the pin on the map.';
+  }
+
+  // Detect iframe / Permissions-Policy block even if browser GPS permission was already granted
+  if (
+    rawMsg.includes('permissions policy') ||
+    rawMsg.includes('feature policy') ||
+    rawMsg.includes('has been disabled in this document') ||
+    (error.code === 1 && isEmbeddedFrame())
+  ) {
+    return isThai
+      ? 'หน้าต่างแสดงตัวอย่าง (Preview/Iframe) จำกัดการเข้าถึง GPS กรุณาเปิดลิงก์ในเบราว์เซอร์หลัก (Safari/Chrome) โดยตรง หรือค้นหาชื่อสถานที่/เลื่อนหมุดบนแผนที่ได้เลย'
+      : 'This embedded preview window restricts GPS access. Open directly in Safari/Chrome, or search your location / drag the pin on the map.';
   }
 
   if (error.code === 1) {
     // PERMISSION_DENIED
     if (ios) {
       return isThai
-        ? 'ไม่ได้รับสิทธิ์ GPS บน iOS: ไปที่ การตั้งค่า (Settings) > ความเป็นส่วนตัวและความปลอดภัย > บริการหาตำแหน่งที่ตั้ง > เว็บไซต์ Safari (หรือแอป) เลือก "ขณะใช้แอป" และเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)"'
-        : 'GPS permission denied on iOS: Open Settings > Privacy & Security > Location Services > Safari Websites and allow location with "Precise Location" enabled.';
+        ? 'ระบบ iOS ยังไม่อนุญาต GPS สำหรับเว็บนี้: ไปที่ การตั้งค่า > ความเป็นส่วนตัวและความปลอดภัย > บริการหาตำแหน่งที่ตั้ง > Safari เลือก "ขณะใช้แอป" และเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)"'
+        : 'GPS permission blocked on iOS: Settings > Privacy & Security > Location Services > Safari Websites > Allow with "Precise Location" enabled.';
     }
     return isThai
-      ? 'ไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์'
-      : 'Location permission denied. Please allow location access in your browser.';
+      ? 'เบราว์เซอร์ยังไม่อนุญาตเข้าถึงตำแหน่งสำหรับหน้าเว็บนี้ กรุณากดอนุญาตตำแหน่งที่รูปกุญแจ/ไอคอนข้างช่อง URL แล้วกด "ลองใหม่"'
+      : 'Location access is blocked for this site. Please allow Location in the address bar site settings and tap Retry.';
   }
 
   if (error.code === 2) {
     // POSITION_UNAVAILABLE
     return isThai
       ? ios
-        ? 'สัญญาณ GPS iOS ไม่พร้อมใช้งาน กรุณาเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" หรือย้ายไปยังจุดที่รับสัญญาณได้ดี'
-        : 'GPS signal unavailable. Please check device Location Services.'
-      : 'GPS position unavailable. Please check your device Location Services.';
+        ? 'สัญญาณ GPS iOS ยังไม่พร้อมใช้งาน (อาจอยู่ในอาคาร) แนะนำให้กด "ลองใหม่" หรือค้นหาชื่อสถานที่บนแผนที่'
+        : 'อุปกรณ์ไม่สามารถระบุตำแหน่ง GPS ได้ในขณะนี้ กรุณาลองใหม่หรือค้นหาชื่อสถานที่บนแผนที่'
+      : 'GPS position unavailable right now. Please retry or search your address on the map.';
   }
 
   // TIMEOUT or fallback
   return isThai
     ? ios
-      ? 'จับสัญญาณ GPS บน iOS นานเกินกำหนด กรุณาตรวจสอบว่าเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" แล้วกดลองจับ GPS ใหม่'
-      : 'GPS signal timed out. Please move to an open area and tap retry.'
-    : 'GPS acquisition timed out. Please tap retry.';
+      ? 'จับสัญญาณ GPS บน iOS นานเกินกำหนด แนะนำให้ลองใหม่ในที่โล่ง หรือค้นหาชื่อสถานที่บนแผนที่'
+      : 'จับสัญญาณ GPS นานเกินกำหนด กรุณากด "ลองใหม่" หรือค้นหาชื่อสถานที่บนแผนที่'
+    : 'GPS acquisition timed out. Tap Retry or search your location on the map.';
+}
+
+/**
+ * Checks navigator.permissions when error.code === 1 so that if the user ALREADY granted
+ * geolocation permission, the UI never falsely claims they denied browser permission
+ * (instead explaining OS/device Location Services or in-app browser restrictions).
+ */
+export async function resolveGeolocationErrorMessage(
+  error: Pick<GeolocationPositionError, 'code' | 'message'> | null | undefined,
+  isThai: boolean
+): Promise<string> {
+  const baseMsg = formatGeolocationError(error, isThai);
+  if (!error || error.code !== 1 || isEmbeddedFrame()) {
+    return baseMsg;
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      const status = await navigator.permissions.query({
+        name: 'geolocation' as PermissionName,
+      });
+      if (status.state === 'granted') {
+        const ios = isIOSDevice();
+        if (ios) {
+          return isThai
+            ? 'เบราว์เซอร์ได้รับสิทธิ์ GPS แล้ว แต่ระบบตำแหน่งของเครื่อง (Location Services) ยังไม่ส่งพิกัด กรุณาเปิดบริการหาตำแหน่งที่ตั้งในเครื่อง หรือใช้ช่องค้นหา/เลื่อนหมุดบนแผนที่'
+            : 'Browser location permission is already granted, but iOS Location Services is unavailable. Check iOS Settings > Location Services or search your location on the map.';
+        }
+        return isThai
+          ? 'คุณอนุญาต GPS ให้เว็บนี้แล้ว แต่อุปกรณ์/ระบบตำแหน่งยังไม่ส่งพิกัด (อาจปิด GPS ของเครื่องหรือเปิดผ่านเว็บวิว) สามารถพิมพ์ค้นหาชื่อสถานที่หรือเลื่อนหมุดบนแผนที่ได้ทันที'
+          : 'GPS permission is already granted, but the device location service did not return a fix. Enable device GPS or search your location on the map.';
+      }
+    }
+  } catch {
+    // Ignore Permissions API errors (e.g. unsupported browsers) and fall back to baseMsg
+  }
+
+  return baseMsg;
 }
 
 /**
@@ -172,7 +237,7 @@ export interface AcquireGpsOptions {
   refineWindowMs?: number;
   /** Stop immediately once accuracy reaches this threshold (meters) */
   targetAccuracyMeters?: number;
-  /** If true, also seed/fallback with OS/network location (enableHighAccuracy: false) when satellite GPS is slow or unavailable indoors/desktop */
+  /** If true, fall back to OS/network location (enableHighAccuracy: false) when satellite GPS is slow (>2.2s) or unavailable indoors/desktop */
   allowCoarseFallback?: boolean;
   /** Optional progress callback whenever a better fix arrives */
   onProgress?: (fix: GpsFixResult) => void;
@@ -180,9 +245,10 @@ export interface AcquireGpsOptions {
 
 /**
  * iOS-safe high-accuracy GPS acquisition.
- * Unlike a single getCurrentPosition() call (which on iOS Safari often immediately resolves with a
- * 500m-3000m Wi-Fi/cell estimate), this uses watchPosition with maximumAge: 0 and refines briefly
- * to pick the highest-accuracy satellite fix.
+ * Prioritizes fresh satellite watchPosition (enableHighAccuracy: true, maximumAge: 0) first
+ * to avoid stale OS cache collisions; if allowCoarseFallback is enabled and satellite GPS
+ * hasn't responded within 2.2s (or reports POSITION_UNAVAILABLE indoors/desktop), triggers a
+ * network/Wi-Fi getCurrentPosition fallback without cutting off satellite refinement.
  */
 export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<GpsFixResult> {
   const {
@@ -206,7 +272,9 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     let watchId: number | null = null;
     let bestFix: GpsFixResult | null = null;
     let coarseFallbackFix: GpsFixResult | null = null;
+    let coarseTriggered = false;
     let refineTimer: ReturnType<typeof setTimeout> | null = null;
+    let coarseDelayTimer: ReturnType<typeof setTimeout> | null = null;
     let hardTimer: ReturnType<typeof setTimeout> | null = null;
     let lastError: GeolocationPositionError | null = null;
 
@@ -220,6 +288,10 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       if (refineTimer !== null) {
         clearTimeout(refineTimer);
         refineTimer = null;
+      }
+      if (coarseDelayTimer !== null) {
+        clearTimeout(coarseDelayTimer);
+        coarseDelayTimer = null;
       }
       if (hardTimer !== null) {
         clearTimeout(hardTimer);
@@ -278,13 +350,17 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       }
     };
 
-    hardTimer = setTimeout(() => {
-      finishWithBest();
-    }, timeoutMs);
-
-    // Optional fast OS/Wi-Fi seed & fallback when allowCoarseFallback is enabled
-    // (critical on desktop browsers or indoor mobile devices where satellite GPS chip times out)
-    if (allowCoarseFallback && typeof navigator.geolocation.getCurrentPosition === 'function') {
+    const triggerCoarseFallback = () => {
+      if (
+        settled ||
+        coarseTriggered ||
+        !allowCoarseFallback ||
+        bestFix !== null ||
+        typeof navigator.geolocation.getCurrentPosition !== 'function'
+      ) {
+        return;
+      }
+      coarseTriggered = true;
       try {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -308,11 +384,22 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
           },
           {
             enableHighAccuracy: false,
-            maximumAge: 60000,
-            timeout: Math.min(4500, timeoutMs),
+            maximumAge: 15000,
+            timeout: Math.min(5000, timeoutMs),
           }
         );
       } catch {}
+    };
+
+    hardTimer = setTimeout(() => {
+      finishWithBest();
+    }, timeoutMs);
+
+    if (allowCoarseFallback) {
+      // Wait 2.2s for real high-accuracy GPS before requesting network/OS fallback
+      coarseDelayTimer = setTimeout(() => {
+        triggerCoarseFallback();
+      }, 2200);
     }
 
     try {
@@ -350,9 +437,13 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
             reject(err);
             return;
           }
-          // If hardware high-accuracy is unavailable and we already have a coarse fallback fix, resolve cleanly
-          if (err.code === 2 && coarseFallbackFix && !bestFix) {
-            finishWithBest();
+          // If hardware high-accuracy is unavailable, try coarse fallback immediately if allowed
+          if (err.code === 2 && allowCoarseFallback && !bestFix) {
+            if (coarseFallbackFix) {
+              finishWithBest();
+            } else {
+              triggerCoarseFallback();
+            }
           }
         },
         {
@@ -372,4 +463,5 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     }
   });
 }
+
 

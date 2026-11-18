@@ -129,6 +129,8 @@ export const CheckoutModal: React.FC = () => {
         if (cancelled) return;
         if (orderTypeRef.current !== 'delivery') return;
         if (toLatLng(gpsDataRef.current.latitude, gpsDataRef.current.longitude)) return;
+        // Avoid auto-saving very coarse (>500m) ISP/cell fixes as a permanent customer pin
+        if (fix.accuracy > 500) return;
 
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
         const nextGps = {

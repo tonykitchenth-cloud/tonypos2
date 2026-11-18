@@ -11,10 +11,12 @@ import {
   Info,
   ExternalLink,
   RefreshCw,
+  Search,
 } from 'lucide-react';
 import {
   acquireAccurateGpsFix,
   formatGeolocationError,
+  resolveGeolocationErrorMessage,
   GpsFixResult,
   toLatLng,
 } from '../../utils/geolocation';
@@ -28,6 +30,8 @@ interface InteractiveMapModalProps {
   initialGpsSeed?: { lat: number; lng: number; accuracy?: number } | null;
   /** Optional synchronously triggered GPS promise from parent click handler (preserves iOS user gesture) */
   pendingGpsPromise?: Promise<GpsFixResult> | null;
+  /** Force fresh Current GPS lock even if parent passed an auto-seeded coordinate */
+  forceLocateOnOpen?: boolean;
   onConfirmLocation?: (location: { latitude: number; longitude: number; mapsUrl: string }) => void;
   language?: 'th' | 'en';
   isViewOnly?: boolean;
@@ -55,6 +59,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   initialLng,
   initialGpsSeed = null,
   pendingGpsPromise = null,
+  forceLocateOnOpen = false,
   onConfirmLocation,
   language = 'th',
   isViewOnly = false,
@@ -66,10 +71,24 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const gpsDotLayerRef = useRef<L.CircleMarker | null>(null);
   const userInteractedRef = useRef<boolean>(false);
+  const manualLocateActiveRef = useRef<boolean>(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   // Keep latest props in refs so opening effect doesn't re-create the Leaflet map on parent state ticks
-  const initialCoordsRef = useRef({ initialLat, initialLng, initialGpsSeed, pendingGpsPromise });
-  initialCoordsRef.current = { initialLat, initialLng, initialGpsSeed, pendingGpsPromise };
+  const initialCoordsRef = useRef({
+    initialLat,
+    initialLng,
+    initialGpsSeed,
+    pendingGpsPromise,
+    forceLocateOnOpen,
+  });
+  initialCoordsRef.current = {
+    initialLat,
+    initialLng,
+    initialGpsSeed,
+    pendingGpsPromise,
+    forceLocateOnOpen,
+  };
 
   const [currentCenter, setCurrentCenter] = useState<{ lat: number; lng: number }>(() => {
     const valid = toLatLng(initialLat, initialLng);
@@ -87,6 +106,12 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   const [hasRealLocation, setHasRealLocation] = useState<boolean>(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearchingPlace, setIsSearchingPlace] = useState<boolean>(false);
+  const [searchResults, setSearchResults] = useState<
+    Array<{ displayName: string; lat: number; lng: number }>
+  >([]);
+  const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
 
   // Helper to update/draw the blue "Your Current GPS" indicator dot on the Leaflet map
   const updateLiveGpsDot = (map: L.Map | null, lat: number, lng: number) => {
@@ -110,12 +135,18 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
     let cancelled = false;
     userInteractedRef.current = false;
+    manualLocateActiveRef.current = false;
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchFeedback(null);
+    setIsSearchingPlace(false);
 
     const {
       initialLat: openLat,
       initialLng: openLng,
       initialGpsSeed: seed,
       pendingGpsPromise: parentPromise,
+      forceLocateOnOpen: forceOpenLocate,
     } = initialCoordsRef.current;
 
     const parsedInitial = toLatLng(openLat, openLng);
@@ -136,13 +167,13 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     setLocationError(null);
     setGpsAccuracyMeters(seed?.accuracy ?? null);
 
-    // Start acquiring Current GPS IMMEDIATELY (without waiting for 150ms DOM timer) when no pin exists yet
-    const needsAutoLocate = !validInitial && !isViewOnly;
+    // Start acquiring Current GPS IMMEDIATELY when no manual/saved pin exists (or when auto-seeded)
+    const needsAutoLocate = (!validInitial || Boolean(forceOpenLocate)) && !isViewOnly;
     if (needsAutoLocate) {
       setIsLocating(true);
 
       const applyGpsFix = (fix: GpsFixResult, isFinal: boolean) => {
-        if (cancelled) return;
+        if (cancelled || manualLocateActiveRef.current) return;
         resolvedLatLng = { lat: fix.lat, lng: fix.lng };
         setGpsAccuracyMeters(fix.accuracy);
         setHasRealLocation(true);
@@ -164,8 +195,8 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
           if (fix.accuracy > 300) {
             setLocationError(
               isThai
-                ? `จับตำแหน่งคร่าวๆ (±${fix.accuracy} ม.) กรุณาเลื่อนหมุดให้ตรงหน้าบ้าน/อาคารของคุณ`
-                : `Approximate location (±${fix.accuracy}m). Drag map to place pin at exact entrance.`
+                ? `จับตำแหน่งคร่าวๆ (±${fix.accuracy} ม.) กรุณาค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้าน`
+                : `Approximate location (±${fix.accuracy}m). Search address or drag map to place exact pin.`
             );
           }
         }
@@ -186,10 +217,16 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
           applyGpsFix(best, true);
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (cancelled || manualLocateActiveRef.current) return;
           setIsLocating(false);
-          if (!resolvedLatLng) {
-            setLocationError(formatGeolocationError(err, isThai));
+          if (!resolvedLatLng || (!validInitial && (seed?.accuracy ?? 0) > 300)) {
+            const fallbackMsg = formatGeolocationError(err, isThai);
+            setLocationError(fallbackMsg);
+            resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
+              if (!cancelled && !manualLocateActiveRef.current && resolvedMsg !== fallbackMsg) {
+                setLocationError(resolvedMsg);
+              }
+            });
           }
         });
     } else {
@@ -276,6 +313,10 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+        searchAbortRef.current = null;
+      }
       gpsDotLayerRef.current = null;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
@@ -284,9 +325,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     };
   }, [isOpen, isViewOnly, isThai]);
 
-  // React immediately to intermediate GPS seed progress updates from parent while modal is locating
+  // React to intermediate GPS seed progress updates from parent ONLY before manual locate or user map drag
   useEffect(() => {
-    if (!isOpen || isViewOnly || !initialGpsSeed) return;
+    if (!isOpen || isViewOnly || !initialGpsSeed || manualLocateActiveRef.current) return;
     const valid = toLatLng(initialGpsSeed.lat, initialGpsSeed.lng);
     if (!valid) return;
 
@@ -296,7 +337,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
     if (mapInstanceRef.current) {
       updateLiveGpsDot(mapInstanceRef.current, valid.lat, valid.lng);
-      if (!userInteractedRef.current && isLocating) {
+      if (!userInteractedRef.current) {
         const targetZoom = (initialGpsSeed.accuracy ?? 999) <= 150 ? 18 : 16;
         mapInstanceRef.current.setView([valid.lat, valid.lng], targetZoom, { animate: true });
         setCurrentCenter({ lat: valid.lat, lng: valid.lng });
@@ -304,7 +345,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     } else if (!userInteractedRef.current) {
       setCurrentCenter({ lat: valid.lat, lng: valid.lng });
     }
-  }, [isOpen, isViewOnly, initialGpsSeed, isLocating]);
+  }, [isOpen, isViewOnly, initialGpsSeed]);
 
   // Handle Current Location GPS Click (with iOS watchPosition accuracy refinement + coarse fallback)
   const handleLocateMe = () => {
@@ -313,6 +354,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
       return;
     }
 
+    manualLocateActiveRef.current = true;
     userInteractedRef.current = false;
     setIsLocating(true);
     setLocationError(null);
@@ -346,16 +388,155 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
         if (best.accuracy > 250) {
           setLocationError(
             isThai
-              ? `สัญญาณ GPS มีความคลาดเคลื่อนประมาณ ±${best.accuracy} ม. กรุณาเปิด "ตำแหน่งที่ตั้งจริง" หรือเลื่อนหมุดให้ตรงหน้าบ้าน`
-              : `GPS accuracy is approx. ±${best.accuracy}m. Enable Precise Location or drag map to adjust.`
+              ? `สัญญาณ GPS มีความคลาดเคลื่อนประมาณ ±${best.accuracy} ม. สามารถพิมพ์ค้นหาสถานที่หรือเลื่อนหมุดให้ตรงหน้าบ้านได้`
+              : `GPS accuracy is approx. ±${best.accuracy}m. Search address or drag map to adjust.`
           );
         }
       })
       .catch((err) => {
         setIsLocating(false);
         console.warn('Geolocation error:', err);
-        setLocationError(formatGeolocationError(err, isThai));
+        const fallbackMsg = formatGeolocationError(err, isThai);
+        setLocationError(fallbackMsg);
+        resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
+          if (resolvedMsg !== fallbackMsg) {
+            setLocationError(resolvedMsg);
+          }
+        });
       });
+  };
+
+  // Search place/street/building on OpenStreetMap Nominatim (with Photon fallback inside Thailand)
+  const handlePlaceSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q || isViewOnly) return;
+
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
+    setIsSearchingPlace(true);
+    setSearchFeedback(null);
+    setSearchResults([]);
+
+    try {
+      const biasViewbox =
+        hasRealLocation && !isDefaultFallbackCenter(currentCenter.lat, currentCenter.lng)
+          ? `&viewbox=${(currentCenter.lng - 0.35).toFixed(4)},${(currentCenter.lat + 0.35).toFixed(4)},${(currentCenter.lng + 0.35).toFixed(4)},${(currentCenter.lat - 0.35).toFixed(4)}&bounded=0`
+          : '';
+
+      const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=th${biasViewbox}&q=${encodeURIComponent(
+        q
+      )}`;
+      const res = await fetch(nomUrl, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+
+      let parsed: Array<{ displayName: string; lat: number; lng: number }> = [];
+
+      if (res.ok) {
+        const rows = (await res.json()) as Array<{
+          display_name?: string;
+          lat?: string;
+          lon?: string;
+        }>;
+        if (Array.isArray(rows)) {
+          parsed = rows
+            .map((r) => {
+              const pt = toLatLng(r.lat, r.lon);
+              if (!pt) return null;
+              return {
+                displayName: (r.display_name || `${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`).trim(),
+                lat: pt.lat,
+                lng: pt.lng,
+              };
+            })
+            .filter((item): item is { displayName: string; lat: number; lng: number } => item !== null);
+        }
+      }
+
+      if (parsed.length === 0) {
+        const photonBias =
+          hasRealLocation && !isDefaultFallbackCenter(currentCenter.lat, currentCenter.lng)
+            ? `&lat=${currentCenter.lat.toFixed(5)}&lon=${currentCenter.lng.toFixed(5)}`
+            : '';
+        const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5${photonBias}`;
+        const pRes = await fetch(photonUrl, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+        if (pRes.ok) {
+          const pData = (await pRes.json()) as {
+            features?: Array<{
+              geometry?: { coordinates?: [number, number] };
+              properties?: { name?: string; street?: string; district?: string; city?: string; state?: string };
+            }>;
+          };
+          parsed = (pData?.features || [])
+            .map((f) => {
+              const coords = f.geometry?.coordinates;
+              if (!Array.isArray(coords) || coords.length < 2) return null;
+              const pt = toLatLng(coords[1], coords[0]);
+              if (!pt || pt.lat < 5.5 || pt.lat > 20.6 || pt.lng < 97.3 || pt.lng > 105.8) {
+                return null;
+              }
+              const p = f.properties || {};
+              const labelParts = [p.name, p.street, p.district, p.city, p.state].filter(Boolean);
+              return {
+                displayName:
+                  labelParts.length > 0
+                    ? labelParts.join(', ')
+                    : `${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`,
+                lat: pt.lat,
+                lng: pt.lng,
+              };
+            })
+            .filter((item): item is { displayName: string; lat: number; lng: number } => item !== null);
+        }
+      }
+
+      if (controller.signal.aborted) return;
+
+      if (parsed.length === 1) {
+        handleSelectSearchResult(parsed[0]);
+      } else if (parsed.length > 1) {
+        setSearchResults(parsed);
+      } else {
+        setSearchFeedback(
+          isThai
+            ? 'ไม่พบสถานที่ที่ค้นหา ลองพิมพ์ชื่อถนน ซอย หรือเขตใกล้เคียง'
+            : 'No places found. Try a nearby street, landmark, or district.'
+        );
+      }
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return;
+      setSearchFeedback(
+        isThai ? 'ค้นหาสถานที่ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' : 'Search failed. Please try again.'
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsSearchingPlace(false);
+      }
+    }
+  };
+
+  const handleSelectSearchResult = (item: { displayName: string; lat: number; lng: number }) => {
+    userInteractedRef.current = true;
+    manualLocateActiveRef.current = true;
+    setIsLocating(false);
+    setHasRealLocation(true);
+    setLocationError(null);
+    setSearchFeedback(null);
+    setSearchResults([]);
+    setCurrentCenter({ lat: Number(item.lat.toFixed(6)), lng: Number(item.lng.toFixed(6)) });
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([item.lat, item.lng], 17, { animate: true });
+    }
   };
 
   const handleZoomIn = () => {
@@ -410,7 +591,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
               <p className="text-[11px] text-gray-500">
                 {addressText || (isViewOnly
                   ? (isThai ? 'พิกัดตรงจุดที่ลูกค้าปักหมุดไว้สำหรับส่งอาหาร' : 'Exact location pinned by customer')
-                  : (isThai ? 'เลื่อนแผนที่หรือลากเพื่อวางหมุดตรงหน้าบ้าน/อาคาร' : 'Drag map to align pin at your location'))}
+                  : (isThai ? 'เลื่อนแผนที่ ค้นหาสถานที่ หรือกดปุ่มตำแหน่งปัจจุบัน' : 'Drag map, search place, or tap Current GPS'))}
               </p>
             </div>
           </div>
@@ -423,6 +604,81 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Inline Place / Address Search Bar (Customer Edit Mode) */}
+        {!isViewOnly && (
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 relative z-30 shrink-0">
+            <form onSubmit={handlePlaceSearch} className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="map-place-search-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (searchFeedback) setSearchFeedback(null);
+                  }}
+                  placeholder={
+                    isThai
+                      ? 'ค้นหาชื่อหมู่บ้าน คอนโด ซอย ถนน หรือจุดใกล้เคียง...'
+                      : 'Search village, condo, street, or landmark...'
+                  }
+                  className="w-full bg-white pl-8 pr-7 py-2 rounded-xl border border-gray-200 text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E65100]/25 focus:border-[#E65100]"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchResults([]);
+                      setSearchFeedback(null);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    aria-label={isThai ? 'ล้างคำค้นหา' : 'Clear search'}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                id="btn-map-place-search"
+                type="submit"
+                disabled={isSearchingPlace || !searchQuery.trim()}
+                className="px-3 py-2 rounded-xl bg-[#1A1A1A] hover:bg-black disabled:bg-gray-300 text-white text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+              >
+                {isSearchingPlace ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Search className="w-3.5 h-3.5" />
+                )}
+                <span>{isThai ? 'ค้นหา' : 'Find'}</span>
+              </button>
+            </form>
+
+            {searchFeedback && (
+              <p className="text-[11px] text-amber-700 font-medium mt-1.5 px-1">
+                {searchFeedback}
+              </p>
+            )}
+
+            {searchResults.length > 0 && (
+              <div className="mt-1.5 bg-white rounded-xl border border-gray-200 shadow-lg max-h-40 overflow-y-auto divide-y divide-gray-100">
+                {searchResults.map((item, idx) => (
+                  <button
+                    key={`${item.lat}_${item.lng}_${idx}`}
+                    type="button"
+                    onClick={() => handleSelectSearchResult(item)}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-800 hover:bg-orange-50 flex items-start gap-2 transition-colors cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-[#E65100] shrink-0 mt-0.5" />
+                    <span className="line-clamp-2 leading-snug">{item.displayName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Map Container Area */}
         <div className="relative w-full h-[55vh] min-h-[320px] max-h-[460px] bg-gray-100 overflow-hidden select-none">

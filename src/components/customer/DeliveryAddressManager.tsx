@@ -4,6 +4,7 @@ import { loadCustomerProfile, saveCustomerProfile } from '../../utils/storage';
 import {
   acquireAccurateGpsFix,
   formatGeolocationError,
+  resolveGeolocationErrorMessage,
   GpsFixResult,
   toLatLng,
 } from '../../utils/geolocation';
@@ -85,11 +86,14 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   const [mapTarget, setMapTarget] = useState<'form' | 'direct'>('form');
   const [gpsSeedForMap, setGpsSeedForMap] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [pendingMapGpsPromise, setPendingMapGpsPromise] = useState<Promise<GpsFixResult> | null>(null);
+  const [forceMapLocateOnOpen, setForceMapLocateOnOpen] = useState<boolean>(false);
 
-  // Track active Add/Edit form session so background GPS prefetch never overwrites a closed/different form or manual pin
+  // Track active Add/Edit form session so background GPS prefetch never overwrites a closed/different form or manual/saved pin
   const formSessionRef = useRef<number>(0);
-  const formManualPinRef = useRef<boolean>(false);
+  const formPinSourceRef = useRef<'none' | 'auto' | 'manual' | 'saved'>('none');
   const prefetchPromiseRef = useRef<Promise<GpsFixResult> | null>(null);
+  const prefetchSettledRef = useRef<boolean>(false);
+  const prefetchAccuracyRef = useRef<number>(9999);
 
   // Quick GPS detection state
   const [isLocating, setIsLocating] = useState<boolean>(false);
@@ -146,13 +150,25 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   const prefetchFormCurrentGps = (sessionId: number) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
+    prefetchSettledRef.current = false;
+    prefetchAccuracyRef.current = 9999;
+
     const applyFix = (fix: GpsFixResult) => {
-      if (formSessionRef.current !== sessionId || formManualPinRef.current) return;
-      const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
-      setFormLat(fix.lat);
-      setFormLng(fix.lng);
-      setFormMapsUrl(pinUrl);
+      if (formSessionRef.current !== sessionId) return;
+      if (formPinSourceRef.current === 'manual' || formPinSourceRef.current === 'saved') return;
+
+      prefetchAccuracyRef.current = fix.accuracy;
       setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+
+      // Only auto-populate form pin when fix is reasonably accurate (<= 250m)
+      // so coarse ISP/cell guesses don't lock out real GPS when opening the map.
+      if (fix.accuracy <= 250) {
+        const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
+        formPinSourceRef.current = 'auto';
+        setFormLat(fix.lat);
+        setFormLng(fix.lng);
+        setFormMapsUrl(pinUrl);
+      }
     };
 
     const promise = acquireAccurateGpsFix({
@@ -166,9 +182,15 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     prefetchPromiseRef.current = promise;
 
     promise
-      .then((best) => applyFix(best))
+      .then((best) => {
+        if (prefetchPromiseRef.current === promise) {
+          prefetchSettledRef.current = true;
+        }
+        applyFix(best);
+      })
       .catch(() => {
         if (prefetchPromiseRef.current === promise) {
+          prefetchSettledRef.current = true;
           prefetchPromiseRef.current = null;
         }
       });
@@ -178,7 +200,10 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   const handleOpenAddForm = () => {
     const nextSession = formSessionRef.current + 1;
     formSessionRef.current = nextSession;
-    formManualPinRef.current = false;
+    formPinSourceRef.current = 'none';
+    prefetchPromiseRef.current = null;
+    prefetchSettledRef.current = false;
+    prefetchAccuracyRef.current = 9999;
 
     setEditingId(null);
     setFormLabel('บ้าน');
@@ -199,7 +224,9 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     e.stopPropagation();
     const nextSession = formSessionRef.current + 1;
     formSessionRef.current = nextSession;
-    formManualPinRef.current = false;
+    prefetchPromiseRef.current = null;
+    prefetchSettledRef.current = false;
+    prefetchAccuracyRef.current = 9999;
 
     setEditingId(item.id);
 
@@ -220,11 +247,13 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
 
     setFormAddressText(item.address);
     if (validSaved && !isBangkokFallback) {
+      formPinSourceRef.current = 'saved';
       setFormLat(validSaved.lat);
       setFormLng(validSaved.lng);
       setFormMapsUrl(item.mapsUrl);
-      prefetchPromiseRef.current = null;
+      setGpsSeedForMap(null);
     } else {
+      formPinSourceRef.current = 'none';
       setFormLat(undefined);
       setFormLng(undefined);
       setFormMapsUrl(undefined);
@@ -283,7 +312,7 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     setTimeout(() => setFeedbackNotice(null), 2500);
   };
 
-  // Open Interactive Map to pan and adjust pin (synchronously preserving GPS user gesture when unpinned)
+  // Open Interactive Map to pan and adjust pin (synchronously preserving GPS user gesture when unpinned or auto-seeded)
   const handleOpenMap = (target: 'form' | 'direct') => {
     setMapTarget(target);
 
@@ -297,8 +326,18 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       Math.abs(targetCoord.lat - 13.7563) < 0.00001 &&
       Math.abs(targetCoord.lng - 100.5018) < 0.00001;
 
-    if (!targetCoord || isFallbackOnly) {
-      if (target === 'form' && prefetchPromiseRef.current) {
+    const isAutoSeededForm =
+      target === 'form' &&
+      (formPinSourceRef.current === 'none' || formPinSourceRef.current === 'auto');
+
+    setForceMapLocateOnOpen(isAutoSeededForm);
+
+    if (!targetCoord || isFallbackOnly || isAutoSeededForm) {
+      if (
+        target === 'form' &&
+        prefetchPromiseRef.current &&
+        (!prefetchSettledRef.current || (targetCoord && !isFallbackOnly && prefetchAccuracyRef.current <= 50))
+      ) {
         setPendingMapGpsPromise(prefetchPromiseRef.current);
       } else {
         const directPromise = acquireAccurateGpsFix({
@@ -326,7 +365,7 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     mapsUrl: string;
   }) => {
     if (mapTarget === 'form') {
-      formManualPinRef.current = true;
+      formPinSourceRef.current = 'manual';
       setFormLat(location.latitude);
       setFormLng(location.longitude);
       setFormMapsUrl(location.mapsUrl);
@@ -379,10 +418,11 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
         const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
 
         if (target === 'form') {
-          formManualPinRef.current = true;
+          formPinSourceRef.current = 'manual';
           setFormLat(fix.lat);
           setFormLng(fix.lng);
           setFormMapsUrl(pinUrl);
+          setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
           if (fix.accuracy > 200) {
             setFormError(
               isThai
@@ -410,13 +450,21 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       .catch((err) => {
         setIsLocating(false);
         console.warn('Geolocation error:', err);
-        const msg = formatGeolocationError(err, isThai);
+        const fallbackMsg = formatGeolocationError(err, isThai);
         if (target === 'form') {
-          setFormError(msg);
+          setFormError(fallbackMsg);
         } else {
-          setFeedbackNotice(msg);
+          setFeedbackNotice(fallbackMsg);
           setTimeout(() => setFeedbackNotice(null), 5000);
         }
+        resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
+          if (resolvedMsg === fallbackMsg) return;
+          if (target === 'form') {
+            setFormError(resolvedMsg);
+          } else {
+            setFeedbackNotice(resolvedMsg);
+          }
+        });
       });
   };
 
@@ -868,11 +916,13 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
         onClose={() => {
           setIsMapModalOpen(false);
           setPendingMapGpsPromise(null);
+          setForceMapLocateOnOpen(false);
         }}
         initialLat={mapTarget === 'form' ? formLat : currentGps.latitude}
         initialLng={mapTarget === 'form' ? formLng : currentGps.longitude}
         initialGpsSeed={gpsSeedForMap}
         pendingGpsPromise={pendingMapGpsPromise}
+        forceLocateOnOpen={forceMapLocateOnOpen}
         onConfirmLocation={handleConfirmPinLocation}
         language={language}
       />
