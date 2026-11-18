@@ -172,6 +172,8 @@ export interface AcquireGpsOptions {
   refineWindowMs?: number;
   /** Stop immediately once accuracy reaches this threshold (meters) */
   targetAccuracyMeters?: number;
+  /** If true, also seed/fallback with OS/network location (enableHighAccuracy: false) when satellite GPS is slow or unavailable indoors/desktop */
+  allowCoarseFallback?: boolean;
   /** Optional progress callback whenever a better fix arrives */
   onProgress?: (fix: GpsFixResult) => void;
 }
@@ -187,6 +189,7 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     timeoutMs = 12000,
     refineWindowMs = 3200,
     targetAccuracyMeters = 25,
+    allowCoarseFallback = false,
     onProgress,
   } = options;
 
@@ -202,6 +205,7 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     let settled = false;
     let watchId: number | null = null;
     let bestFix: GpsFixResult | null = null;
+    let coarseFallbackFix: GpsFixResult | null = null;
     let refineTimer: ReturnType<typeof setTimeout> | null = null;
     let hardTimer: ReturnType<typeof setTimeout> | null = null;
     let lastError: GeolocationPositionError | null = null;
@@ -223,12 +227,47 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       }
     };
 
+    const parsePosition = (pos: GeolocationPosition): GpsFixResult | null => {
+      const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
+      if (!pt) return null;
+
+      const acc =
+        typeof pos.coords.accuracy === 'number' && Number.isFinite(pos.coords.accuracy)
+          ? pos.coords.accuracy
+          : 9999;
+
+      const heading =
+        typeof pos.coords.heading === 'number' &&
+        Number.isFinite(pos.coords.heading) &&
+        pos.coords.heading >= 0 &&
+        pos.coords.heading <= 360
+          ? pos.coords.heading
+          : null;
+
+      const speed =
+        typeof pos.coords.speed === 'number' &&
+        Number.isFinite(pos.coords.speed) &&
+        pos.coords.speed >= 0
+          ? pos.coords.speed
+          : null;
+
+      return {
+        lat: Number(pt.lat.toFixed(6)),
+        lng: Number(pt.lng.toFixed(6)),
+        accuracy: Math.round(acc),
+        heading,
+        speed,
+        timestamp: pos.timestamp || Date.now(),
+      };
+    };
+
     const finishWithBest = () => {
       if (settled) return;
       settled = true;
       cleanup();
-      if (bestFix) {
-        resolve(bestFix);
+      const chosen = bestFix || coarseFallbackFix;
+      if (chosen) {
+        resolve(chosen);
       } else {
         reject(
           lastError || {
@@ -243,41 +282,45 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       finishWithBest();
     }, timeoutMs);
 
+    // Optional fast OS/Wi-Fi seed & fallback when allowCoarseFallback is enabled
+    // (critical on desktop browsers or indoor mobile devices where satellite GPS chip times out)
+    if (allowCoarseFallback && typeof navigator.geolocation.getCurrentPosition === 'function') {
+      try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (settled) return;
+            const candidate = parsePosition(pos);
+            if (!candidate) return;
+            if (!coarseFallbackFix || candidate.accuracy <= coarseFallbackFix.accuracy) {
+              coarseFallbackFix = candidate;
+            }
+            if (!bestFix) {
+              onProgress?.(candidate);
+            }
+          },
+          (err) => {
+            if (!lastError) lastError = err;
+            if (err.code === 1 && !bestFix && !coarseFallbackFix) {
+              settled = true;
+              cleanup();
+              reject(err);
+            }
+          },
+          {
+            enableHighAccuracy: false,
+            maximumAge: 60000,
+            timeout: Math.min(4500, timeoutMs),
+          }
+        );
+      } catch {}
+    }
+
     try {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
           if (settled) return;
-          const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
-          if (!pt) return;
-
-          const acc =
-            typeof pos.coords.accuracy === 'number' && Number.isFinite(pos.coords.accuracy)
-              ? pos.coords.accuracy
-              : 9999;
-
-          const heading =
-            typeof pos.coords.heading === 'number' &&
-            Number.isFinite(pos.coords.heading) &&
-            pos.coords.heading >= 0 &&
-            pos.coords.heading <= 360
-              ? pos.coords.heading
-              : null;
-
-          const speed =
-            typeof pos.coords.speed === 'number' &&
-            Number.isFinite(pos.coords.speed) &&
-            pos.coords.speed >= 0
-              ? pos.coords.speed
-              : null;
-
-          const candidate: GpsFixResult = {
-            lat: Number(pt.lat.toFixed(6)),
-            lng: Number(pt.lng.toFixed(6)),
-            accuracy: Math.round(acc),
-            heading,
-            speed,
-            timestamp: pos.timestamp || Date.now(),
-          };
+          const candidate = parsePosition(pos);
+          if (!candidate) return;
 
           const isBetter = !bestFix || candidate.accuracy <= bestFix.accuracy;
           if (isBetter) {
@@ -301,10 +344,15 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
         (err) => {
           lastError = err;
           // Permission denied won't recover during this call
-          if (err.code === 1 && !bestFix) {
+          if (err.code === 1 && !bestFix && !coarseFallbackFix) {
             settled = true;
             cleanup();
             reject(err);
+            return;
+          }
+          // If hardware high-accuracy is unavailable and we already have a coarse fallback fix, resolve cleanly
+          if (err.code === 2 && coarseFallbackFix && !bestFix) {
+            finishWithBest();
           }
         },
         {
@@ -315,7 +363,13 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       );
     } catch (err) {
       cleanup();
-      reject(err);
+      if (coarseFallbackFix) {
+        settled = true;
+        resolve(coarseFallbackFix);
+      } else {
+        reject(err);
+      }
     }
   });
 }
+

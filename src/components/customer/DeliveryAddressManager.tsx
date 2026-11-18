@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SavedDeliveryAddress, Language } from '../../types';
 import { loadCustomerProfile, saveCustomerProfile } from '../../utils/storage';
-import { acquireAccurateGpsFix, formatGeolocationError } from '../../utils/geolocation';
+import {
+  acquireAccurateGpsFix,
+  formatGeolocationError,
+  GpsFixResult,
+  toLatLng,
+} from '../../utils/geolocation';
 import { InteractiveMapModal } from './InteractiveMapModal';
 import {
   MapPin,
@@ -78,6 +83,13 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   // State for Interactive Map Modal
   const [isMapModalOpen, setIsMapModalOpen] = useState<boolean>(false);
   const [mapTarget, setMapTarget] = useState<'form' | 'direct'>('form');
+  const [gpsSeedForMap, setGpsSeedForMap] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const [pendingMapGpsPromise, setPendingMapGpsPromise] = useState<Promise<GpsFixResult> | null>(null);
+
+  // Track active Add/Edit form session so background GPS prefetch never overwrites a closed/different form or manual pin
+  const formSessionRef = useRef<number>(0);
+  const formManualPinRef = useRef<boolean>(false);
+  const prefetchPromiseRef = useRef<Promise<GpsFixResult> | null>(null);
 
   // Quick GPS detection state
   const [isLocating, setIsLocating] = useState<boolean>(false);
@@ -130,8 +142,44 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     saveCustomerProfile({ savedAddresses: updated });
   };
 
-  // Open "เพิ่มที่อยู่" (Add New Address) Form
+  // Start background Current GPS acquisition for the Add/Edit form without blocking UI
+  const prefetchFormCurrentGps = (sessionId: number) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const applyFix = (fix: GpsFixResult) => {
+      if (formSessionRef.current !== sessionId || formManualPinRef.current) return;
+      const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
+      setFormLat(fix.lat);
+      setFormLng(fix.lng);
+      setFormMapsUrl(pinUrl);
+      setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+    };
+
+    const promise = acquireAccurateGpsFix({
+      timeoutMs: 11000,
+      refineWindowMs: 2800,
+      targetAccuracyMeters: 25,
+      allowCoarseFallback: true,
+      onProgress: (fix) => applyFix(fix),
+    });
+
+    prefetchPromiseRef.current = promise;
+
+    promise
+      .then((best) => applyFix(best))
+      .catch(() => {
+        if (prefetchPromiseRef.current === promise) {
+          prefetchPromiseRef.current = null;
+        }
+      });
+  };
+
+  // Open "เพิ่มที่อยู่" (Add New Address) Form — always start acquiring Current GPS immediately
   const handleOpenAddForm = () => {
+    const nextSession = formSessionRef.current + 1;
+    formSessionRef.current = nextSession;
+    formManualPinRef.current = false;
+
     setEditingId(null);
     setFormLabel('บ้าน');
     setFormCustomLabel('');
@@ -139,13 +187,20 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     setFormLat(undefined);
     setFormLng(undefined);
     setFormMapsUrl(undefined);
+    setGpsSeedForMap(null);
     setFormError(null);
     setIsFormOpen(true);
+
+    prefetchFormCurrentGps(nextSession);
   };
 
-  // Open "แก้ไข" (Edit Saved Address) Form
+  // Open "แก้ไข" (Edit Saved Address) Form — if no valid pin exists yet, pre-acquire Current GPS
   const handleOpenEditForm = (item: SavedDeliveryAddress, e: React.MouseEvent) => {
     e.stopPropagation();
+    const nextSession = formSessionRef.current + 1;
+    formSessionRef.current = nextSession;
+    formManualPinRef.current = false;
+
     setEditingId(item.id);
 
     const standardLabels = ['บ้าน', 'ที่ทำงาน', 'คอนโด'];
@@ -157,10 +212,26 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       setFormCustomLabel(item.label);
     }
 
+    const validSaved = toLatLng(item.latitude, item.longitude);
+    const isBangkokFallback =
+      validSaved &&
+      Math.abs(validSaved.lat - 13.7563) < 0.00001 &&
+      Math.abs(validSaved.lng - 100.5018) < 0.00001;
+
     setFormAddressText(item.address);
-    setFormLat(item.latitude);
-    setFormLng(item.longitude);
-    setFormMapsUrl(item.mapsUrl);
+    if (validSaved && !isBangkokFallback) {
+      setFormLat(validSaved.lat);
+      setFormLng(validSaved.lng);
+      setFormMapsUrl(item.mapsUrl);
+      prefetchPromiseRef.current = null;
+    } else {
+      setFormLat(undefined);
+      setFormLng(undefined);
+      setFormMapsUrl(undefined);
+      setGpsSeedForMap(null);
+      prefetchFormCurrentGps(nextSession);
+    }
+
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -212,9 +283,39 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     setTimeout(() => setFeedbackNotice(null), 2500);
   };
 
-  // Open Interactive Map to pan and adjust pin
+  // Open Interactive Map to pan and adjust pin (synchronously preserving GPS user gesture when unpinned)
   const handleOpenMap = (target: 'form' | 'direct') => {
     setMapTarget(target);
+
+    const targetCoord =
+      target === 'form'
+        ? toLatLng(formLat, formLng)
+        : toLatLng(currentGps.latitude, currentGps.longitude);
+
+    const isFallbackOnly =
+      targetCoord &&
+      Math.abs(targetCoord.lat - 13.7563) < 0.00001 &&
+      Math.abs(targetCoord.lng - 100.5018) < 0.00001;
+
+    if (!targetCoord || isFallbackOnly) {
+      if (target === 'form' && prefetchPromiseRef.current) {
+        setPendingMapGpsPromise(prefetchPromiseRef.current);
+      } else {
+        const directPromise = acquireAccurateGpsFix({
+          timeoutMs: 11000,
+          refineWindowMs: 2800,
+          targetAccuracyMeters: 25,
+          allowCoarseFallback: true,
+          onProgress: (fix) => {
+            setGpsSeedForMap({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+          },
+        });
+        setPendingMapGpsPromise(directPromise);
+      }
+    } else {
+      setPendingMapGpsPromise(null);
+    }
+
     setIsMapModalOpen(true);
   };
 
@@ -225,6 +326,7 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     mapsUrl: string;
   }) => {
     if (mapTarget === 'form') {
+      formManualPinRef.current = true;
       setFormLat(location.latitude);
       setFormLng(location.longitude);
       setFormMapsUrl(location.mapsUrl);
@@ -270,12 +372,14 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       timeoutMs: 12000,
       refineWindowMs: 3200,
       targetAccuracyMeters: 25,
+      allowCoarseFallback: true,
     })
       .then((fix) => {
         setIsLocating(false);
         const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
 
         if (target === 'form') {
+          formManualPinRef.current = true;
           setFormLat(fix.lat);
           setFormLng(fix.lng);
           setFormMapsUrl(pinUrl);
@@ -761,9 +865,14 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       {/* 6. INTERACTIVE LEAFLET MAP MODAL (เลื่อนหาตำแหน่งหมุดที่ถูกต้องได้ในแผนที่) */}
       <InteractiveMapModal
         isOpen={isMapModalOpen}
-        onClose={() => setIsMapModalOpen(false)}
+        onClose={() => {
+          setIsMapModalOpen(false);
+          setPendingMapGpsPromise(null);
+        }}
         initialLat={mapTarget === 'form' ? formLat : currentGps.latitude}
         initialLng={mapTarget === 'form' ? formLng : currentGps.longitude}
+        initialGpsSeed={gpsSeedForMap}
+        pendingGpsPromise={pendingMapGpsPromise}
         onConfirmLocation={handleConfirmPinLocation}
         language={language}
       />

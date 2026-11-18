@@ -123,6 +123,7 @@ export const CheckoutModal: React.FC = () => {
       timeoutMs: 9000,
       refineWindowMs: 2500,
       targetAccuracyMeters: 25,
+      allowCoarseFallback: true,
     })
       .then((fix) => {
         if (cancelled) return;
