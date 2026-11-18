@@ -106,6 +106,8 @@ export const CheckoutModal: React.FC = () => {
           longitude: lng,
           mapsUrl: url,
         });
+      } else {
+        setGpsData({});
       }
     }
   }, [isCheckoutOpen, customerProfile]);

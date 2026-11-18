@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SavedDeliveryAddress, Language } from '../../types';
 import { loadCustomerProfile, saveCustomerProfile } from '../../utils/storage';
+import { acquireAccurateGpsFix, formatGeolocationError } from '../../utils/geolocation';
 import { InteractiveMapModal } from './InteractiveMapModal';
 import {
   MapPin,
@@ -135,9 +136,9 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     setFormLabel('บ้าน');
     setFormCustomLabel('');
     setFormAddressText('');
-    setFormLat(currentGps.latitude);
-    setFormLng(currentGps.longitude);
-    setFormMapsUrl(currentGps.mapsUrl);
+    setFormLat(undefined);
+    setFormLng(undefined);
+    setFormMapsUrl(undefined);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -254,43 +255,65 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     }
   };
 
-  // Quick GPS auto-detection using Geolocation API
+  // Quick GPS auto-detection using iOS-safe high-accuracy watchPosition refinement
   const handleQuickLocate = (target: 'form' | 'direct') => {
-    if (!navigator.geolocation) {
-      alert(isThai ? 'เบราว์เซอร์ไม่รองรับ GPS' : 'Geolocation not supported');
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setFeedbackNotice(isThai ? 'เบราว์เซอร์ไม่รองรับ GPS' : 'Geolocation not supported');
+      setTimeout(() => setFeedbackNotice(null), 3500);
       return;
     }
 
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    setFormError(null);
+
+    acquireAccurateGpsFix({
+      timeoutMs: 12000,
+      refineWindowMs: 3200,
+      targetAccuracyMeters: 25,
+    })
+      .then((fix) => {
         setIsLocating(false);
-        const lat = Number(pos.coords.latitude.toFixed(6));
-        const lng = Number(pos.coords.longitude.toFixed(6));
-        const pinUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
 
         if (target === 'form') {
-          setFormLat(lat);
-          setFormLng(lng);
+          setFormLat(fix.lat);
+          setFormLng(fix.lng);
           setFormMapsUrl(pinUrl);
+          if (fix.accuracy > 200) {
+            setFormError(
+              isThai
+                ? `จับสัญญาณได้แบบคลาดเคลื่อน ±${fix.accuracy} ม. แนะนำให้กด "เลื่อนหมุดในแผนที่" เพื่อปักให้ตรงจุด`
+                : `GPS accuracy ±${fix.accuracy}m. Tap "Adjust on Map" to verify exact pin.`
+            );
+          }
         } else {
-          const loc = { latitude: lat, longitude: lng, mapsUrl: pinUrl };
+          const loc = { latitude: fix.lat, longitude: fix.lng, mapsUrl: pinUrl };
           setCurrentGps(loc);
           if (onGpsChange) onGpsChange(loc);
           saveCustomerProfile({
-            currentLatitude: lat,
-            currentLongitude: lng,
+            currentLatitude: fix.lat,
+            currentLongitude: fix.lng,
             currentMapsUrl: pinUrl,
           });
+          setFeedbackNotice(
+            isThai
+              ? `ปักหมุด GPS ปัจจุบันแล้ว (แม่นยำ ±${fix.accuracy} ม.)`
+              : `Pinned current GPS (±${fix.accuracy}m)`
+          );
+          setTimeout(() => setFeedbackNotice(null), 3500);
         }
-      },
-      (err) => {
+      })
+      .catch((err) => {
         setIsLocating(false);
         console.warn('Geolocation error:', err);
-        alert(isThai ? 'กรุณาอนุญาตการเข้าถึงตำแหน่ง (GPS) หรือใช้ปุ่มเปิดแผนที่เพื่อเลือกตำแหน่ง' : 'Please allow location permission or open the map to pin manually.');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+        const msg = formatGeolocationError(err, isThai);
+        if (target === 'form') {
+          setFormError(msg);
+        } else {
+          setFeedbackNotice(msg);
+          setTimeout(() => setFeedbackNotice(null), 5000);
+        }
+      });
   };
 
   // Save the address form (Add or Edit)

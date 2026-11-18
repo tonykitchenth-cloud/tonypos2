@@ -25,18 +25,23 @@ import {
   Volume2,
   VolumeX,
   Compass,
+  Crosshair,
+  RefreshCw,
 } from 'lucide-react';
+import {
+  LatLngPoint,
+  toLatLng,
+  extractCoordsFromMapsUrl,
+  shouldAcceptGpsUpdate,
+  formatGeolocationError,
+  acquireAccurateGpsFix,
+} from '../../utils/geolocation';
 
 interface RiderRouteMapModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: RestaurantOrder | null;
   language?: 'th' | 'en';
-}
-
-interface LatLngPoint {
-  lat: number;
-  lng: number;
 }
 
 interface RouteStep {
@@ -51,19 +56,6 @@ const DEFAULT_BANGKOK_CENTER: LatLngPoint = {
   lat: 13.7563,
   lng: 100.5018,
 };
-
-// Extract coordinates if embedded inside a Google Maps URL (e.g. ?query=13.75,100.50 or @13.75,100.50)
-function extractCoordsFromMapsUrl(mapsUrl?: string): LatLngPoint | null {
-  if (!mapsUrl) return null;
-  const match = mapsUrl.match(/(?:@|query=|q=|destination=)(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
-  if (!match) return null;
-  const lat = Number(match[1]);
-  const lng = Number(match[2]);
-  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-    return { lat, lng };
-  }
-  return null;
-}
 
 // Haversine distance in meters
 function calculateHaversineMeters(a: LatLngPoint, b: LatLngPoint): number {
@@ -165,32 +157,64 @@ function renderManeuverIcon(maneuverType: string, modifier: string) {
   return <ArrowUp className="w-6 h-6 text-white stroke-[2.5]" />;
 }
 
-async function geocodeAddress(query: string, signal?: AbortSignal): Promise<LatLngPoint | null> {
+function normalizeThaiAddressForSearch(raw: string): string {
+  return raw
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/(?:^|\s)ต\.\s*/g, ' ตำบล ')
+    .replace(/(?:^|\s)อ\.\s*/g, ' อำเภอ ')
+    .replace(/(?:^|\s)จ\.\s*/g, ' จังหวัด ')
+    .replace(/(?:^|\s)ถ\.\s*/g, ' ถนน ')
+    .replace(/(?:^|\s)ซ\.\s*/g, ' ซอย ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildViewboxParams(biasPoint?: LatLngPoint | null): string {
+  if (!biasPoint) return '';
+  const delta = 0.45; // ~50km soft bias around rider/store without strict bounding
+  const left = (biasPoint.lng - delta).toFixed(4);
+  const top = (biasPoint.lat + delta).toFixed(4);
+  const right = (biasPoint.lng + delta).toFixed(4);
+  const bottom = (biasPoint.lat - delta).toFixed(4);
+  return `&viewbox=${left},${top},${right},${bottom}&bounded=0`;
+}
+
+async function geocodeAddress(
+  query: string,
+  options?: { biasPoint?: LatLngPoint | null; signal?: AbortSignal }
+): Promise<LatLngPoint | null> {
+  const signal = options?.signal;
+  const biasPoint = options?.biasPoint;
   const cleaned = query.trim();
   if (!cleaned) return null;
 
-  const candidates: string[] = [cleaned];
+  const normalized = normalizeThaiAddressForSearch(cleaned);
+  const candidates: string[] = Array.from(new Set([cleaned, normalized].filter(Boolean)));
 
-  const withoutHouseNo = cleaned
-    .replace(/^[\d/\-]+\s*(หมู่\s*\d+|ม\.\s*\d+)?\s*/i, '')
-    .replace(/\(.*?\)/g, ' ')
+  const withoutHouseNo = normalized
+    .replace(/^[\d/\-]+\s*(หมู่ที่?\s*\d+|ม\.\s*\d+)?\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (withoutHouseNo && withoutHouseNo !== cleaned) {
+  if (withoutHouseNo && !candidates.includes(withoutHouseNo)) {
     candidates.push(withoutHouseNo);
   }
 
-  const commaParts = cleaned
+  const commaParts = normalized
     .split(/[,\n]+/)
     .map((p) => p.trim())
     .filter(Boolean);
   if (commaParts.length >= 2) {
-    candidates.push(commaParts.slice(-2).join(' '));
+    const tail = commaParts.slice(-2).join(' ');
+    if (tail && !candidates.includes(tail)) {
+      candidates.push(tail);
+    }
   }
+
+  const viewboxQuery = buildViewboxParams(biasPoint);
 
   for (const candidate of candidates) {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&q=${encodeURIComponent(
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=th${viewboxQuery}&q=${encodeURIComponent(
         candidate
       )}`;
       const res = await fetch(url, {
@@ -201,11 +225,19 @@ async function geocodeAddress(query: string, signal?: AbortSignal): Promise<LatL
       });
       if (!res.ok) continue;
       const results = (await res.json()) as Array<{ lat?: string; lon?: string }>;
-      if (Array.isArray(results) && results.length > 0 && results[0].lat && results[0].lon) {
-        const lat = Number(results[0].lat);
-        const lng = Number(results[0].lon);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          return { lat, lng };
+      if (Array.isArray(results) && results.length > 0) {
+        const validPoints = results
+          .map((r) => toLatLng(r.lat, r.lon))
+          .filter((pt): pt is LatLngPoint => pt !== null);
+
+        if (validPoints.length > 0) {
+          if (biasPoint && validPoints.length > 1) {
+            // Prefer plausible match closest to rider/store to prevent cross-province mismatches
+            validPoints.sort(
+              (a, b) => calculateHaversineMeters(biasPoint, a) - calculateHaversineMeters(biasPoint, b)
+            );
+          }
+          return validPoints[0];
         }
       }
     } catch (err) {
@@ -213,12 +245,67 @@ async function geocodeAddress(query: string, signal?: AbortSignal): Promise<LatL
     }
   }
 
+  // Secondary fallback: Photon fuzzy search with lat/lon location bias (filtered inside Thailand bounds)
+  try {
+    const photonBias = biasPoint ? `&lat=${biasPoint.lat.toFixed(5)}&lon=${biasPoint.lng.toFixed(5)}` : '';
+    const photonQuery = withoutHouseNo || normalized || cleaned;
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(photonQuery)}&limit=5${photonBias}`;
+    const res = await fetch(photonUrl, {
+      signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        features?: Array<{ geometry?: { coordinates?: [number, number] } }>;
+      };
+      const features = data?.features || [];
+      const thaiPoints = features
+        .map((f) => {
+          const coords = f.geometry?.coordinates;
+          if (!Array.isArray(coords) || coords.length < 2) return null;
+          return toLatLng(coords[1], coords[0]);
+        })
+        .filter(
+          (pt): pt is LatLngPoint =>
+            pt !== null && pt.lat >= 5.5 && pt.lat <= 20.6 && pt.lng >= 97.3 && pt.lng <= 105.8
+        );
+      if (thaiPoints.length > 0) {
+        if (biasPoint && thaiPoints.length > 1) {
+          thaiPoints.sort(
+            (a, b) => calculateHaversineMeters(biasPoint, a) - calculateHaversineMeters(biasPoint, b)
+          );
+        }
+        return thaiPoints[0];
+      }
+    }
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') return null;
+  }
+
   return null;
 }
 
-// Google-Maps-style directional navigation arrow marker for live GPS navigation
-function createNavigationArrowIcon(headingDeg: number, isThai: boolean): L.DivIcon {
+// Google-Maps-style directional navigation arrow marker for live GPS navigation (or Store pin if store fallback)
+function createNavigationArrowIcon(headingDeg: number, isThai: boolean, isStoreFallback: boolean = false): L.DivIcon {
   const safeHeading = Number.isFinite(headingDeg) ? headingDeg : 0;
+  if (isStoreFallback) {
+    return L.divIcon({
+      className: 'rider-custom-store-marker',
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      html: `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;">
+          <div style="width:32px;height:32px;border-radius:9999px;background:#F97316;border:3px solid #FFFFFF;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.45);">
+            <div style="width:10px;height:10px;border-radius:9999px;background:#FFFFFF;"></div>
+          </div>
+          <div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);background:#9A3412;color:#FFFFFF;font-size:9px;font-weight:800;padding:1px 6px;border-radius:9999px;white-space:nowrap;border:1px solid rgba(255,255,255,0.4);box-shadow:0 2px 6px rgba(0,0,0,0.4);">
+            ${isThai ? 'ร้านค้า' : 'Store'}
+          </div>
+        </div>
+      `,
+    });
+  }
+
   return L.divIcon({
     className: 'rider-custom-nav-marker',
     iconSize: [44, 44],
@@ -271,17 +358,28 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const originMarkerRef = useRef<L.Marker | null>(null);
+  const accuracyCircleRef = useRef<L.Circle | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastSpokenStepRef = useRef<string>('');
   const hasAutoZoomedNavRef = useRef<boolean>(false);
+  const bestOriginGpsRef = useRef<{ accuracy: number; timestamp: number } | null>(null);
+  const storeFallbackRef = useRef<LatLngPoint | null>(null);
+  const refinedGeocodeWithGpsRef = useRef<boolean>(false);
 
   const [originPoint, setOriginPoint] = useState<LatLngPoint | null>(null);
-  const [originSource, setOriginSource] = useState<'gps' | 'store' | 'default'>('default');
-  const originSourceRef = useRef<'gps' | 'store' | 'default'>('default');
-  const [riderHeading, setRiderHeading] = useState<number>(0);
+  const [originSource, setOriginSource] = useState<'gps' | 'store' | 'locating' | 'unavailable'>('locating');
+  const originSourceRef = useRef<'gps' | 'store' | 'locating' | 'unavailable'>('locating');
+  const [originAccuracyMeters, setOriginAccuracyMeters] = useState<number | null>(null);
+  const [gpsErrorMsg, setGpsErrorMsg] = useState<string | null>(null);
+  const [isRetryingGps, setIsRetryingGps] = useState<boolean>(false);
+  const [riderHeading, setRiderHeading] = useState<number | null>(null);
+
   const [destPoint, setDestPoint] = useState<LatLngPoint | null>(null);
+  const [destSource, setDestSource] = useState<'customer_gps' | 'maps_url' | 'geocoded' | 'manual' | null>(null);
+  const [isManualPinMode, setIsManualPinMode] = useState<boolean>(false);
+  const isManualPinModeRef = useRef<boolean>(false);
 
   const [isMapReady, setIsMapReady] = useState<boolean>(false);
   const [isResolvingDest, setIsResolvingDest] = useState<boolean>(false);
@@ -302,6 +400,10 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
   const [showStepsDrawer, setShowStepsDrawer] = useState<boolean>(false);
 
   const deliveryAddress = order?.customer?.deliveryAddress || '';
+
+  useEffect(() => {
+    isManualPinModeRef.current = isManualPinMode;
+  }, [isManualPinMode]);
 
   // Close cleanly on Escape key & stop TTS on unmount
   useEffect(() => {
@@ -329,6 +431,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     hasAutoZoomedNavRef.current = false;
     setIsNavigating(true);
     setIsAutoFollow(true);
+    setIsManualPinMode(false);
     lastSpokenStepRef.current = '';
 
     const timer = setTimeout(() => {
@@ -339,12 +442,15 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
         mapInstanceRef.current = null;
       }
 
-      const initialLat = order?.customer?.latitude || DEFAULT_BANGKOK_CENTER.lat;
-      const initialLng = order?.customer?.longitude || DEFAULT_BANGKOK_CENTER.lng;
+      const initialCustomerCoords =
+        toLatLng(order?.customer?.latitude, order?.customer?.longitude) ||
+        extractCoordsFromMapsUrl(order?.customer?.mapsUrl);
+      const initialLat = initialCustomerCoords?.lat ?? DEFAULT_BANGKOK_CENTER.lat;
+      const initialLng = initialCustomerCoords?.lng ?? DEFAULT_BANGKOK_CENTER.lng;
 
       const map = L.map(mapContainerRef.current, {
         center: [initialLat, initialLng],
-        zoom: 16,
+        zoom: initialCustomerCoords ? 16 : 13,
         zoomControl: false,
         attributionControl: false,
       });
@@ -357,6 +463,18 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       // If rider manually drags map during active navigation, pause auto-follow so they can inspect freely
       map.on('dragstart', () => {
         setIsAutoFollow(false);
+      });
+
+      // Allow rider to tap map to manually place/correct destination pin when adjust mode is active
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        if (!isManualPinModeRef.current) return;
+        const tapped = toLatLng(e.latlng.lat, e.latlng.lng);
+        if (tapped) {
+          setDestPoint({ lat: Number(tapped.lat.toFixed(6)), lng: Number(tapped.lng.toFixed(6)) });
+          setDestSource('manual');
+          setGeocodeFailed(false);
+          setIsManualPinMode(false);
+        }
       });
 
       routeLayerRef.current = L.layerGroup().addTo(map);
@@ -398,17 +516,19 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
         mapInstanceRef.current = null;
       }
       originMarkerRef.current = null;
+      accuracyCircleRef.current = null;
       destMarkerRef.current = null;
       routeLayerRef.current = null;
       setIsMapReady(false);
     };
   }, [isOpen, order?.id]);
 
-  // 2. Resolve Destination Coordinates (exact pin -> mapsUrl coords -> Nominatim geocode)
+  // 2. Resolve Destination Coordinates (exact customer pin -> mapsUrl coords -> location-biased Thai geocode)
   useEffect(() => {
     if (!isOpen || !order) return;
 
     const controller = new AbortController();
+    refinedGeocodeWithGpsRef.current = false;
     setManualSearchText(order.customer?.deliveryAddress || '');
     setGeocodeFailed(false);
     setRouteSteps([]);
@@ -418,11 +538,10 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     setRouteDurationSeconds(null);
 
     const resolveDestination = async () => {
-      if (order.customer?.latitude && order.customer?.longitude) {
-        setDestPoint({
-          lat: order.customer.latitude,
-          lng: order.customer.longitude,
-        });
+      const exactPin = toLatLng(order.customer?.latitude, order.customer?.longitude);
+      if (exactPin) {
+        setDestPoint(exactPin);
+        setDestSource('customer_gps');
         setIsResolvingDest(false);
         return;
       }
@@ -430,6 +549,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       const urlCoords = extractCoordsFromMapsUrl(order.customer?.mapsUrl);
       if (urlCoords) {
         setDestPoint(urlCoords);
+        setDestSource('maps_url');
         setIsResolvingDest(false);
         return;
       }
@@ -437,19 +557,25 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       const addr = order.customer?.deliveryAddress?.trim() || '';
       if (!addr) {
         setDestPoint(null);
+        setDestSource(null);
         setGeocodeFailed(true);
         setIsResolvingDest(false);
         return;
       }
 
       setDestPoint(null);
+      setDestSource(null);
       setIsResolvingDest(true);
-      const found = await geocodeAddress(addr, controller.signal);
+      const found = await geocodeAddress(addr, {
+        biasPoint: originSourceRef.current === 'gps' ? originPoint : storeFallbackRef.current,
+        signal: controller.signal,
+      });
       if (controller.signal.aborted) return;
 
       setIsResolvingDest(false);
       if (found) {
         setDestPoint(found);
+        setDestSource('geocoded');
         setGeocodeFailed(false);
       } else {
         setGeocodeFailed(true);
@@ -461,65 +587,145 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     return () => controller.abort();
   }, [isOpen, order]);
 
-  // 3. Track Rider Live GPS + Heading continuously (with fallback to Store Address or Bangkok Center)
+  // Refine text-geocoded destination once real Rider GPS arrives (prevents wrong-province Nominatim match)
+  useEffect(() => {
+    if (!isOpen || !order || originSource !== 'gps' || !originPoint) return;
+    if (refinedGeocodeWithGpsRef.current) return;
+    if (destSource === 'customer_gps' || destSource === 'maps_url' || destSource === 'manual') return;
+
+    const addr = order.customer?.deliveryAddress?.trim() || '';
+    if (!addr) return;
+
+    refinedGeocodeWithGpsRef.current = true;
+    const controller = new AbortController();
+    geocodeAddress(addr, { biasPoint: originPoint, signal: controller.signal }).then((refined) => {
+      if (controller.signal.aborted || !refined) return;
+      setDestPoint((prev) => {
+        if (!prev) return refined;
+        // Update if refined result differs noticeably (> 150m) from unbiased initial guess
+        return calculateHaversineMeters(prev, refined) > 150 ? refined : prev;
+      });
+      setDestSource('geocoded');
+      setGeocodeFailed(false);
+    });
+
+    return () => controller.abort();
+  }, [isOpen, order, originSource, originPoint, destSource]);
+
+  // 3. Track Rider Live GPS + Heading continuously via single iOS-safe watchPosition (with accuracy filtering)
   useEffect(() => {
     if (!isOpen) return;
 
     let cancelled = false;
-    setOriginPoint(DEFAULT_BANGKOK_CENTER);
-    originSourceRef.current = 'default';
-    setOriginSource('default');
+    bestOriginGpsRef.current = null;
+    storeFallbackRef.current = null;
+    setOriginPoint(null);
+    originSourceRef.current = 'locating';
+    setOriginSource('locating');
+    setOriginAccuracyMeters(null);
+    setGpsErrorMsg(null);
+    setRiderHeading(null);
 
-    if (settings?.address) {
-      geocodeAddress(settings.address).then((storeCoords) => {
-        if (!cancelled && storeCoords && originSourceRef.current !== 'gps') {
+    // Optional store address fallback ONLY if owner configured a specific address (not generic "Bangkok, Thailand")
+    const trimmedStoreAddr = (settings?.address || '').trim();
+    const hasSpecificStoreAddr =
+      trimmedStoreAddr.length > 0 && trimmedStoreAddr.toLowerCase() !== 'bangkok, thailand';
+
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    if (hasSpecificStoreAddr) {
+      geocodeAddress(trimmedStoreAddr).then((storeCoords) => {
+        if (cancelled || !storeCoords) return;
+        storeFallbackRef.current = storeCoords;
+        // Wait briefly for GPS first; if GPS already failed/unavailable, show store fallback immediately
+        if (originSourceRef.current === 'unavailable') {
           originSourceRef.current = 'store';
           setOriginPoint(storeCoords);
           setOriginSource('store');
         }
       });
+
+      fallbackTimer = setTimeout(() => {
+        if (!cancelled && originSourceRef.current === 'locating' && storeFallbackRef.current) {
+          originSourceRef.current = 'store';
+          setOriginPoint(storeFallbackRef.current);
+          setOriginSource('store');
+        }
+      }, 4500);
     }
 
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          originSourceRef.current = 'gps';
-          const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setOriginPoint(pt);
-          setOriginSource('gps');
-          if (typeof pos.coords.heading === 'number' && Number.isFinite(pos.coords.heading)) {
-            setRiderHeading(pos.coords.heading);
-          }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
-      );
-
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           if (cancelled) return;
+          const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
+          if (!pt) return;
+
+          const acc =
+            typeof pos.coords.accuracy === 'number' && Number.isFinite(pos.coords.accuracy)
+              ? Math.round(pos.coords.accuracy)
+              : 9999;
+          const ts = pos.timestamp || Date.now();
+
+          if (!shouldAcceptGpsUpdate(bestOriginGpsRef.current, { accuracy: acc, timestamp: ts })) {
+            return;
+          }
+
+          bestOriginGpsRef.current = { accuracy: acc, timestamp: ts };
           originSourceRef.current = 'gps';
-          const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setOriginPoint(pt);
+          setOriginPoint({ lat: Number(pt.lat.toFixed(6)), lng: Number(pt.lng.toFixed(6)) });
           setOriginSource('gps');
-          if (typeof pos.coords.heading === 'number' && Number.isFinite(pos.coords.heading)) {
+          setOriginAccuracyMeters(acc);
+          setGpsErrorMsg(null);
+
+          if (
+            typeof pos.coords.heading === 'number' &&
+            Number.isFinite(pos.coords.heading) &&
+            pos.coords.heading >= 0 &&
+            pos.coords.heading <= 360
+          ) {
             setRiderHeading(pos.coords.heading);
           }
         },
-        () => {},
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
+        (err) => {
+          if (cancelled) return;
+          console.warn('Rider GPS watch error:', err);
+          setGpsErrorMsg(formatGeolocationError(err, isThai));
+          if (originSourceRef.current !== 'gps') {
+            if (storeFallbackRef.current) {
+              originSourceRef.current = 'store';
+              setOriginPoint(storeFallbackRef.current);
+              setOriginSource('store');
+            } else {
+              originSourceRef.current = 'unavailable';
+              setOriginSource('unavailable');
+            }
+          }
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
       );
+    } else {
+      setGpsErrorMsg(
+        isThai ? 'อุปกรณ์ไม่รองรับ GPS กรุณาเปิดใช้บริการตำแหน่งที่ตั้ง' : 'Geolocation is not supported.'
+      );
+      if (storeFallbackRef.current) {
+        originSourceRef.current = 'store';
+        setOriginPoint(storeFallbackRef.current);
+        setOriginSource('store');
+      } else {
+        originSourceRef.current = 'unavailable';
+        setOriginSource('unavailable');
+      }
     }
 
     return () => {
       cancelled = true;
+      if (fallbackTimer !== null) clearTimeout(fallbackTimer);
       if (watchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
     };
-  }, [isOpen, settings?.address]);
+  }, [isOpen, settings?.address, isThai]);
 
   // Fit map bounds helper (Overview mode)
   const fitMapToRoute = useCallback(
@@ -632,15 +838,15 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     }
   }, [isOpen, isNavigating, isVoiceEnabled, activeNavStep, isThai]);
 
-  // 4. Update Markers & Follow Rider Camera in Live Navigation Mode
+  // 4. Update Markers, GPS Accuracy Ring & Follow Rider Camera in Live Navigation Mode
   useEffect(() => {
     if (!isOpen || !isMapReady) return;
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Compute heading toward next route point if GPS heading wasn't supplied
-    let computedBearing = riderHeading;
-    if (originPoint && (!computedBearing || computedBearing === 0)) {
+    // Compute heading toward next route point if real GPS heading wasn't supplied
+    let computedBearing = riderHeading !== null ? riderHeading : 0;
+    if (originPoint && riderHeading === null) {
       if (routeCoords.length > 1) {
         const target = routeCoords[Math.min(2, routeCoords.length - 1)];
         computedBearing = calculateBearingDegrees(originPoint, { lat: target[0], lng: target[1] });
@@ -650,7 +856,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     }
 
     if (originPoint) {
-      const arrowIcon = createNavigationArrowIcon(computedBearing, isThai);
+      const arrowIcon = createNavigationArrowIcon(computedBearing, isThai, originSource === 'store');
       if (originMarkerRef.current) {
         originMarkerRef.current.setLatLng([originPoint.lat, originPoint.lng]);
         originMarkerRef.current.setIcon(arrowIcon);
@@ -659,6 +865,35 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           icon: arrowIcon,
           zIndexOffset: 700,
         }).addTo(map);
+      }
+
+      if (originSource === 'gps' && originAccuracyMeters && originAccuracyMeters <= 2500) {
+        if (accuracyCircleRef.current) {
+          accuracyCircleRef.current.setLatLng([originPoint.lat, originPoint.lng]);
+          accuracyCircleRef.current.setRadius(originAccuracyMeters);
+        } else {
+          accuracyCircleRef.current = L.circle([originPoint.lat, originPoint.lng], {
+            radius: originAccuracyMeters,
+            color: '#2563EB',
+            weight: 1,
+            opacity: 0.45,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.12,
+            interactive: false,
+          }).addTo(map);
+        }
+      } else if (accuracyCircleRef.current) {
+        accuracyCircleRef.current.remove();
+        accuracyCircleRef.current = null;
+      }
+    } else {
+      if (originMarkerRef.current) {
+        originMarkerRef.current.remove();
+        originMarkerRef.current = null;
+      }
+      if (accuracyCircleRef.current) {
+        accuracyCircleRef.current.remove();
+        accuracyCircleRef.current = null;
       }
     }
 
@@ -677,12 +912,12 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     }
 
     // Active Navigation Camera Auto-Follow (zoomed in on Rider GPS like Google Maps "Start" mode)
-    if (isNavigating && isAutoFollow && originPoint && originSource === 'gps') {
+    if (isNavigating && isAutoFollow && !isManualPinMode && originPoint && originSource === 'gps') {
       const targetZoom = hasAutoZoomedNavRef.current ? Math.max(map.getZoom(), 16.5) : 17;
       hasAutoZoomedNavRef.current = true;
       map.setView([originPoint.lat, originPoint.lng], targetZoom, { animate: true });
     }
-  }, [isOpen, isMapReady, originPoint, originSource, destPoint, riderHeading, routeCoords, isNavigating, isAutoFollow, isThai]);
+  }, [isOpen, isMapReady, originPoint, originSource, originAccuracyMeters, destPoint, riderHeading, routeCoords, isNavigating, isAutoFollow, isManualPinMode, isThai]);
 
   // 5. Fetch & Draw OSRM Driving Route whenever Origin or Destination updates
   useEffect(() => {
@@ -691,8 +926,10 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     if (!map) return;
 
     if (!originPoint || !destPoint) {
-      if (originPoint && !destPoint) {
-        map.setView([originPoint.lat, originPoint.lng], 15);
+      if (destPoint && !originPoint) {
+        map.setView([destPoint.lat, destPoint.lng], 16, { animate: true });
+      } else if (originPoint && !destPoint) {
+        map.setView([originPoint.lat, originPoint.lng], 16, { animate: true });
       }
       return;
     }
@@ -768,11 +1005,13 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
         }
 
         // In Navigation mode: zoom onto Rider GPS if live GPS is active; otherwise fit full route so Rider sees entire route
-        if (isNavigating && isAutoFollow && originSourceRef.current === 'gps') {
-          hasAutoZoomedNavRef.current = true;
-          map.setView([originPoint.lat, originPoint.lng], 17, { animate: true });
-        } else if (!hasAutoZoomedNavRef.current) {
-          fitMapToRoute(originPoint, destPoint, coords);
+        if (!isManualPinMode) {
+          if (isNavigating && isAutoFollow && originSourceRef.current === 'gps') {
+            hasAutoZoomedNavRef.current = true;
+            map.setView([originPoint.lat, originPoint.lng], 17, { animate: true });
+          } else if (!hasAutoZoomedNavRef.current) {
+            fitMapToRoute(originPoint, destPoint, coords);
+          }
         }
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return;
@@ -788,7 +1027,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             dashArray: '8, 8',
           }).addTo(routeLayerRef.current);
           setRouteCoords(lineCoords);
-          if (!(isNavigating && isAutoFollow && originSourceRef.current === 'gps')) {
+          if (!isManualPinMode && !(isNavigating && isAutoFollow && originSourceRef.current === 'gps')) {
             fitMapToRoute(originPoint, destPoint, lineCoords);
           }
         }
@@ -813,39 +1052,66 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     if (!manualSearchText.trim()) return;
     setIsResolvingDest(true);
     setGeocodeFailed(false);
-    const found = await geocodeAddress(manualSearchText);
+    const found = await geocodeAddress(manualSearchText, {
+      biasPoint: originSourceRef.current === 'gps' ? originPoint : storeFallbackRef.current,
+    });
     setIsResolvingDest(false);
     if (found) {
       setDestPoint(found);
+      setDestSource('geocoded');
       setGeocodeFailed(false);
     } else {
       setGeocodeFailed(true);
     }
   };
 
+  // Manual iOS-safe high-accuracy GPS retry
+  const handleRetryGps = () => {
+    if (isRetryingGps) return;
+    setIsRetryingGps(true);
+    setGpsErrorMsg(null);
+    acquireAccurateGpsFix({
+      timeoutMs: 12000,
+      refineWindowMs: 3200,
+      targetAccuracyMeters: 25,
+      onProgress: (fix) => {
+        bestOriginGpsRef.current = { accuracy: fix.accuracy, timestamp: fix.timestamp };
+        originSourceRef.current = 'gps';
+        setOriginPoint({ lat: fix.lat, lng: fix.lng });
+        setOriginSource('gps');
+        setOriginAccuracyMeters(fix.accuracy);
+        if (fix.heading !== null) setRiderHeading(fix.heading);
+      },
+    })
+      .then((best) => {
+        setIsRetryingGps(false);
+        bestOriginGpsRef.current = { accuracy: best.accuracy, timestamp: best.timestamp };
+        originSourceRef.current = 'gps';
+        setOriginPoint({ lat: best.lat, lng: best.lng });
+        setOriginSource('gps');
+        setOriginAccuracyMeters(best.accuracy);
+        setGpsErrorMsg(null);
+        if (best.heading !== null) setRiderHeading(best.heading);
+        if (mapInstanceRef.current && isAutoFollow) {
+          mapInstanceRef.current.setView([best.lat, best.lng], 17, { animate: true });
+        }
+      })
+      .catch((err) => {
+        setIsRetryingGps(false);
+        setGpsErrorMsg(formatGeolocationError(err, isThai));
+      });
+  };
+
   // Snap back to live Google-Maps-style Navigation Follow mode
   const handleResumeNavigation = () => {
     setIsNavigating(true);
     setIsAutoFollow(true);
-    if (originPoint && mapInstanceRef.current) {
+    setIsManualPinMode(false);
+    if (originPoint && originSource === 'gps' && mapInstanceRef.current) {
       mapInstanceRef.current.flyTo([originPoint.lat, originPoint.lng], 17, { duration: 0.7 });
       return;
     }
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          originSourceRef.current = 'gps';
-          const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setOriginPoint(pt);
-          setOriginSource('gps');
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.flyTo([pt.lat, pt.lng], 17, { duration: 0.7 });
-          }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    }
+    handleRetryGps();
   };
 
   const handleViewFullRoute = () => {
@@ -856,8 +1122,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
   if (!isOpen || !order) return null;
 
   const externalGoogleMapsUrl = destPoint
-    ? `https://www.google.com/maps/dir/?api=1&destination=${destPoint.lat},${destPoint.lng}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddress)}`;
+    ? `https://www.google.com/maps/dir/?api=1&destination=${destPoint.lat},${destPoint.lng}&travelmode=driving`
+    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddress)}&travelmode=driving`;
 
   return (
     <div
@@ -1003,19 +1269,72 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             </div>
           )}
 
-          {/* Origin hint if GPS not yet granted */}
-          {!isResolvingDest && !isRouting && destPoint && originSource !== 'gps' && (
-            <div className="bg-neutral-900/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-neutral-700 shadow-lg text-[11px] font-semibold text-neutral-300 flex items-center gap-1.5 pointer-events-auto">
-              <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          {/* Manual Destination Pin Drop Instruction */}
+          {isManualPinMode && (
+            <div className="bg-orange-600/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-orange-300/60 shadow-2xl flex items-center justify-between gap-2 text-xs font-extrabold text-white pointer-events-auto">
+              <div className="flex items-center gap-2">
+                <Crosshair className="w-4 h-4 shrink-0" />
+                <span>
+                  {isThai
+                    ? 'แตะบนแผนที่เพื่อวางหมุดปลายทางลูกค้าใหม่'
+                    : 'Tap anywhere on map to set destination pin'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManualPinMode(false)}
+                className="px-2 py-0.5 rounded-lg bg-black/30 hover:bg-black/45 text-[11px] font-bold cursor-pointer shrink-0"
+              >
+                {isThai ? 'ยกเลิก' : 'Cancel'}
+              </button>
+            </div>
+          )}
+
+          {/* Origin GPS Status / iOS Precise Location Alert + Retry */}
+          {!isResolvingDest && !isRouting && originSource !== 'gps' && (
+            <div className="max-w-md bg-neutral-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-amber-500/40 shadow-lg text-[11px] font-semibold text-neutral-200 flex items-center justify-between gap-2 pointer-events-auto">
+              <div className="flex items-start gap-1.5 min-w-0">
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">
+                  {gpsErrorMsg
+                    ? gpsErrorMsg
+                    : originSource === 'store'
+                    ? isThai
+                      ? 'กำลังเริ่มจากตำแหน่งร้าน (แตะ "จับ GPS" เพื่อใช้ตำแหน่งจริงของคุณ)'
+                      : 'Routing from store (tap Retry GPS for live position)'
+                    : isThai
+                    ? 'กำลังจับสัญญาณ GPS ความแม่นยำสูง...'
+                    : 'Acquiring high-accuracy GPS signal...'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRetryGps}
+                disabled={isRetryingGps}
+                className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-black text-[11px] flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRetryingGps ? 'animate-spin' : ''}`} />
+                <span>{isThai ? 'จับ GPS' : 'Retry'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Low-accuracy warning if GPS fixed > 200m (common before iOS satellite lock) */}
+          {originSource === 'gps' && originAccuracyMeters !== null && originAccuracyMeters > 200 && (
+            <div className="bg-amber-950/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-amber-500/50 shadow-lg text-[11px] font-bold text-amber-200 flex items-center gap-2 pointer-events-auto">
               <span>
-                {originSource === 'store'
-                  ? isThai
-                    ? 'นำทางจากตำแหน่งร้าน (เปิด GPS มือถือเพื่อนำทางตามตำแหน่งจริง)'
-                    : 'Routing from store (enable GPS for live turn-by-turn tracking)'
-                  : isThai
-                  ? 'แสดงเส้นทางนำทางเบื้องต้น (เปิด GPS เพื่อนำทางตามตำแหน่งจริง)'
-                  : 'Preview navigation route (enable GPS for live tracking)'}
+                {isThai
+                  ? `⚠️ สัญญาณ GPS ยังคลาดเคลื่อน (±${originAccuracyMeters} ม.)`
+                  : `⚠️ Low GPS accuracy (±${originAccuracyMeters}m)`}
               </span>
+              <button
+                type="button"
+                onClick={handleRetryGps}
+                disabled={isRetryingGps}
+                className="underline font-black text-white cursor-pointer"
+              >
+                {isThai ? 'จับใหม่' : 'Refine'}
+              </button>
             </div>
           )}
 
@@ -1026,8 +1345,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                 <span>
                   {isThai
-                    ? 'ไม่พบพิกัดอัตโนมัติจากที่อยู่เต็ม ลองค้นหาชื่อถนน/ซอย/สถานที่ใกล้เคียง หรือเปิด Google Maps ด้านล่าง'
-                    : 'Could not auto-locate exact address. Try searching street/landmark or open Google Maps.'}
+                    ? 'ไม่พบพิกัดอัตโนมัติจากที่อยู่เต็ม ลองค้นหาชื่อถนน/ซอย หรือกดปุ่มปรับหมุดปลายทางบนแผนที่'
+                    : 'Could not auto-locate address. Search street/landmark or drop pin on map.'}
                 </span>
               </div>
               <form onSubmit={handleManualSearch} className="flex gap-1.5">
@@ -1067,6 +1386,23 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
         {/* Floating Map Controls (Bottom Right) */}
         <div className="absolute right-3 bottom-3 z-20 flex flex-col gap-2">
+          {/* Adjust Destination Pin Manually */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsAutoFollow(false);
+              setIsManualPinMode((prev) => !prev);
+            }}
+            className={`w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+              isManualPinMode
+                ? 'bg-orange-500 border-orange-300 text-neutral-950'
+                : 'bg-neutral-900/95 hover:bg-neutral-800 border-neutral-700 text-amber-300'
+            }`}
+            title={isThai ? 'ปรับหมุดปลายทางบนแผนที่' : 'Adjust Destination Pin'}
+          >
+            <Crosshair className="w-5 h-5" />
+          </button>
+
           {/* Overview / Fit Entire Route */}
           <button
             type="button"
@@ -1180,10 +1516,28 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-neutral-400 truncate">
-                {destPoint
-                  ? `${destPoint.lat.toFixed(5)}, ${destPoint.lng.toFixed(5)}`
-                  : deliveryAddress}
+              <p className="text-[11px] text-neutral-400 truncate flex items-center gap-1.5">
+                {originSource === 'gps' && originAccuracyMeters !== null && (
+                  <span className="text-blue-400 font-bold shrink-0">
+                    GPS ±{originAccuracyMeters}{isThai ? 'ม.' : 'm'}
+                  </span>
+                )}
+                {destSource && (
+                  <span className="text-orange-300 font-bold shrink-0">
+                    {destSource === 'customer_gps'
+                      ? isThai ? '• หมุดลูกค้า' : '• Customer GPS'
+                      : destSource === 'maps_url'
+                      ? isThai ? '• จากลิงก์' : '• From Link'
+                      : destSource === 'manual'
+                      ? isThai ? '• ปักหมุดเอง' : '• Manual Pin'
+                      : isThai ? '• ค้นหาจากที่อยู่' : '• Geocoded'}
+                  </span>
+                )}
+                <span className="truncate font-mono">
+                  {destPoint
+                    ? `${destPoint.lat.toFixed(5)}, ${destPoint.lng.toFixed(5)}`
+                    : deliveryAddress}
+                </span>
               </p>
             </div>
           </div>

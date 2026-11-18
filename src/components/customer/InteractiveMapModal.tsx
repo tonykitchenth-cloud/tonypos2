@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { X, Navigation, Check, ZoomIn, ZoomOut, MapPin, Loader2, Info, ExternalLink } from 'lucide-react';
+import {
+  acquireAccurateGpsFix,
+  formatGeolocationError,
+  toLatLng,
+} from '../../utils/geolocation';
 
 interface InteractiveMapModalProps {
   isOpen: boolean;
@@ -35,25 +40,31 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
 
-  const [currentCenter, setCurrentCenter] = useState<{ lat: number; lng: number }>(() => ({
-    lat: initialLat || DEFAULT_CENTER.lat,
-    lng: initialLng || DEFAULT_CENTER.lng,
-  }));
+  const [currentCenter, setCurrentCenter] = useState<{ lat: number; lng: number }>(() => {
+    const valid = toLatLng(initialLat, initialLng);
+    return valid || DEFAULT_CENTER;
+  });
 
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isMapMoving, setIsMapMoving] = useState<boolean>(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState<number | null>(null);
 
   // Initialize or re-center map when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
-    const startLat = initialLat || currentCenter.lat || DEFAULT_CENTER.lat;
-    const startLng = initialLng || currentCenter.lng || DEFAULT_CENTER.lng;
+    let cancelled = false;
+    const validInitial = toLatLng(initialLat, initialLng);
+    const startLat = validInitial ? validInitial.lat : DEFAULT_CENTER.lat;
+    const startLng = validInitial ? validInitial.lng : DEFAULT_CENTER.lng;
+    setCurrentCenter({ lat: startLat, lng: startLng });
+    setLocationError(null);
+    setGpsAccuracyMeters(null);
 
     // Small delay to ensure modal DOM is mounted and sized
     const timer = setTimeout(() => {
-      if (!mapContainerRef.current) return;
+      if (cancelled || !mapContainerRef.current) return;
 
       // Clean up previous map if exists
       if (mapInstanceRef.current) {
@@ -63,7 +74,7 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
       const map = L.map(mapContainerRef.current, {
         center: [startLat, startLng],
-        zoom: initialLat ? 18 : 14,
+        zoom: validInitial ? 18 : 14,
         zoomControl: false,
         attributionControl: false,
       });
@@ -107,28 +118,39 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
       // Force recalculation of container size
       map.invalidateSize();
+      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 200);
 
-      // If no initialLat provided and in interactive mode, try to center on user's current GPS
-      if (!initialLat && !isViewOnly && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (mapInstanceRef.current) {
-              const uLat = pos.coords.latitude;
-              const uLng = pos.coords.longitude;
-              mapInstanceRef.current.setView([uLat, uLng], 17, { animate: true });
-              setCurrentCenter({
-                lat: Number(uLat.toFixed(6)),
-                lng: Number(uLng.toFixed(6)),
-              });
-            }
+      // If no initialLat provided and in interactive mode, acquire high-accuracy iOS-safe GPS fix
+      if (!validInitial && !isViewOnly && typeof navigator !== 'undefined' && navigator.geolocation) {
+        setIsLocating(true);
+        acquireAccurateGpsFix({
+          timeoutMs: 10000,
+          refineWindowMs: 2800,
+          targetAccuracyMeters: 25,
+          onProgress: (fix) => {
+            if (cancelled || !mapInstanceRef.current) return;
+            setGpsAccuracyMeters(fix.accuracy);
+            mapInstanceRef.current.setView([fix.lat, fix.lng], fix.accuracy <= 100 ? 18 : 16, { animate: true });
+            setCurrentCenter({ lat: fix.lat, lng: fix.lng });
           },
-          () => {},
-          { enableHighAccuracy: true, timeout: 6000 }
-        );
+        })
+          .then((best) => {
+            if (cancelled) return;
+            setIsLocating(false);
+            setGpsAccuracyMeters(best.accuracy);
+            if (mapInstanceRef.current) {
+              mapInstanceRef.current.setView([best.lat, best.lng], 18, { animate: true });
+            }
+            setCurrentCenter({ lat: best.lat, lng: best.lng });
+          })
+          .catch(() => {
+            if (!cancelled) setIsLocating(false);
+          });
       }
     }, 150);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
@@ -137,9 +159,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     };
   }, [isOpen, initialLat, initialLng, isViewOnly]);
 
-  // Handle Current Location GPS Click
+  // Handle Current Location GPS Click (with iOS watchPosition accuracy refinement)
   const handleLocateMe = () => {
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setLocationError(isThai ? 'อุปกรณ์ของคุณไม่รองรับการดึงพิกัด GPS' : 'Geolocation is not supported');
       return;
     }
@@ -147,30 +169,38 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
     setIsLocating(true);
     setLocationError(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setIsLocating(false);
-        const uLat = pos.coords.latitude;
-        const uLng = pos.coords.longitude;
+    acquireAccurateGpsFix({
+      timeoutMs: 12000,
+      refineWindowMs: 3200,
+      targetAccuracyMeters: 20,
+      onProgress: (fix) => {
+        setGpsAccuracyMeters(fix.accuracy);
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.flyTo([uLat, uLng], 18, { duration: 1.2 });
+          mapInstanceRef.current.setView([fix.lat, fix.lng], fix.accuracy <= 100 ? 18 : 16, { animate: true });
         }
-        setCurrentCenter({
-          lat: Number(uLat.toFixed(6)),
-          lng: Number(uLng.toFixed(6)),
-        });
+        setCurrentCenter({ lat: fix.lat, lng: fix.lng });
       },
-      (err) => {
+    })
+      .then((best) => {
+        setIsLocating(false);
+        setGpsAccuracyMeters(best.accuracy);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setView([best.lat, best.lng], 18, { animate: true });
+        }
+        setCurrentCenter({ lat: best.lat, lng: best.lng });
+        if (best.accuracy > 200) {
+          setLocationError(
+            isThai
+              ? `สัญญาณ GPS มีความคลาดเคลื่อนประมาณ ±${best.accuracy} ม. กรุณาเปิด "ตำแหน่งที่ตั้งจริง" หรือเลื่อนหมุดให้ตรงหน้าบ้าน`
+              : `GPS accuracy is approx. ±${best.accuracy}m. Enable Precise Location or drag map to adjust.`
+          );
+        }
+      })
+      .catch((err) => {
         setIsLocating(false);
         console.warn('Geolocation error:', err);
-        setLocationError(
-          isThai
-            ? 'ไม่สามารถดึงตำแหน่งปัจจุบันได้ กรุณาเปิดการเข้าถึงตำแหน่ง (GPS) หรือเลื่อนแผนที่ด้วยตนเอง'
-            : 'Unable to access GPS location. Please enable location permissions or drag the map manually.'
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+        setLocationError(formatGeolocationError(err, isThai));
+      });
   };
 
   const handleZoomIn = () => {
@@ -201,9 +231,9 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
 
   if (!isOpen) return null;
 
-  const lat = initialLat || currentCenter.lat;
-  const lng = initialLng || currentCenter.lng;
-  const googleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const lat = isViewOnly ? (toLatLng(initialLat, initialLng)?.lat ?? currentCenter.lat) : currentCenter.lat;
+  const lng = isViewOnly ? (toLatLng(initialLat, initialLng)?.lng ?? currentCenter.lng) : currentCenter.lng;
+  const googleNavUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
   const googlePinUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
   return (
@@ -342,8 +372,13 @@ export const InteractiveMapModal: React.FC<InteractiveMapModalProps> = ({
         {/* Footer Area with Coordinates & Action Buttons */}
         <div className="p-4 bg-white border-t border-gray-100 space-y-3 shrink-0">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500 font-bold">
-              {isThai ? 'พิกัด GPS:' : 'GPS Coordinates:'}
+            <span className="text-gray-500 font-bold flex items-center gap-1.5">
+              <span>{isThai ? 'พิกัด GPS:' : 'GPS Coordinates:'}</span>
+              {gpsAccuracyMeters !== null && (
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${gpsAccuracyMeters <= 50 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  ±{gpsAccuracyMeters} {isThai ? 'ม.' : 'm'}
+                </span>
+              )}
             </span>
             <span className="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-lg text-[11px]">
               {lat.toFixed(6)}, {lng.toFixed(6)}
