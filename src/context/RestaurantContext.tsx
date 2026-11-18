@@ -175,7 +175,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [cart, setCartState] = useState<CartItem[]>(() => loadCart());
   const [favorites, setFavoritesState] = useState<string[]>(() => loadFavorites());
   const [customerProfile, setCustomerProfileState] = useState<CustomerProfile>(() => loadCustomerProfile());
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentMethod, setPaymentMethodState] = useState<PaymentMethod>(() => loadCustomerProfile().paymentMethod || 'cash');
+
+  const setPaymentMethod = useCallback((method: PaymentMethod) => {
+    setPaymentMethodState(method);
+    saveCustomerProfile({ paymentMethod: method });
+  }, []);
 
   // In-App Customer Active Order Tracking
   const [activeOrderId, setActiveOrderIdState] = useState<string | null>(() => getSavedActiveOrderId());
@@ -227,7 +232,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Sync customer profile whenever updated from storage or modals
   useEffect(() => {
     const handleProfileUpdate = () => {
-      setCustomerProfileState(loadCustomerProfile());
+      const loaded = loadCustomerProfile();
+      setCustomerProfileState(loaded);
+      if (loaded.paymentMethod) {
+        setPaymentMethodState(loaded.paymentMethod);
+      }
     };
     window.addEventListener('customer_profile_updated', handleProfileUpdate);
     return () => {

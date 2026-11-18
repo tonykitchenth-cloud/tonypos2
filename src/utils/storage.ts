@@ -52,6 +52,7 @@ export const defaultCustomerProfile: CustomerProfile = {
   phone: '',
   deliveryAddress: '',
   orderType: 'pickup',
+  paymentMethod: 'cash',
   notes: '',
   savedAddresses: [],
 };
@@ -210,7 +211,18 @@ export function loadCustomerProfile(): CustomerProfile {
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object' && (parsed.name || parsed.phone || parsed.deliveryAddress)) {
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            (parsed.name ||
+              parsed.phone ||
+              parsed.deliveryAddress ||
+              parsed.orderType ||
+              parsed.paymentMethod ||
+              parsed.notes ||
+              parsed.currentLatitude !== undefined ||
+              (Array.isArray(parsed.savedAddresses) && parsed.savedAddresses.length > 0))
+          ) {
             candidate = {
               ...defaultCustomerProfile,
               ...parsed,
@@ -271,11 +283,12 @@ export function saveCustomerProfile(profile: Partial<CustomerProfile>): void {
       phone: (profile.phone !== undefined && profile.phone.trim() !== '') ? profile.phone.trim() : (existing.phone || ''),
       deliveryAddress: (profile.deliveryAddress !== undefined && profile.deliveryAddress.trim() !== '') ? profile.deliveryAddress.trim() : (existing.deliveryAddress || ''),
       orderType: profile.orderType || existing.orderType || 'pickup',
-      notes: (profile.notes !== undefined && profile.notes.trim() !== '') ? profile.notes.trim() : (existing.notes || ''),
+      paymentMethod: profile.paymentMethod || existing.paymentMethod || 'cash',
+      notes: 'notes' in profile && profile.notes !== undefined ? profile.notes.trim() : (existing.notes || ''),
       savedAddresses: profile.savedAddresses !== undefined ? profile.savedAddresses : (existing.savedAddresses || []),
-      currentLatitude: profile.currentLatitude !== undefined ? profile.currentLatitude : existing.currentLatitude,
-      currentLongitude: profile.currentLongitude !== undefined ? profile.currentLongitude : existing.currentLongitude,
-      currentMapsUrl: profile.currentMapsUrl !== undefined ? profile.currentMapsUrl : existing.currentMapsUrl,
+      currentLatitude: 'currentLatitude' in profile ? profile.currentLatitude : existing.currentLatitude,
+      currentLongitude: 'currentLongitude' in profile ? profile.currentLongitude : existing.currentLongitude,
+      currentMapsUrl: 'currentMapsUrl' in profile ? profile.currentMapsUrl : existing.currentMapsUrl,
     };
 
     const payload = JSON.stringify(merged);

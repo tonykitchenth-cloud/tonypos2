@@ -200,6 +200,7 @@ export interface CustomerProfile {
   phone: string;
   deliveryAddress: string;
   orderType: OrderType;
+  paymentMethod?: PaymentMethod;
   notes?: string;
   savedAddresses?: SavedDeliveryAddress[];
   currentLatitude?: number;

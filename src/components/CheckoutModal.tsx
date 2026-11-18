@@ -1,31 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { CustomerProfile, OrderType, PaymentMethod, OrderItemSnapshot, RestaurantOrder } from '../types';
+import { CustomerProfile, OrderType, OrderItemSnapshot } from '../types';
 import { formatCurrency } from '../utils/pricing';
-import { generateOrderMessage, buildWhatsAppUrl, buildLineUrl } from '../utils/orderMessageGenerator';
 import { CreateOrderParams } from '../utils/orderSync';
-import { saveCustomerOrder } from '../utils/orderHistory';
+import { acquireAccurateGpsFix, toLatLng } from '../utils/geolocation';
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
 import { DeliveryAddressManager } from './customer/DeliveryAddressManager';
 import {
   X,
-  User,
-  Phone,
-  MapPin,
-  FileText,
-  ShoppingBag,
-  Send,
   AlertCircle,
-  Sparkles,
   Check,
-  Copy,
   CreditCard,
   Banknote,
-  ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import confetti from 'canvas-confetti';
 
 export const CheckoutModal: React.FC = () => {
   const {
@@ -37,8 +26,6 @@ export const CheckoutModal: React.FC = () => {
     updateCustomerProfile,
     paymentMethod,
     setPaymentMethod,
-    clearCart,
-    setLastOrderInfo,
     settings,
     language,
     storeAvailability,
@@ -78,39 +65,95 @@ export const CheckoutModal: React.FC = () => {
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const orderTypeRef = useRef<OrderType>(orderType);
+  orderTypeRef.current = orderType;
+  const gpsDataRef = useRef(gpsData);
+  gpsDataRef.current = gpsData;
 
-  // Re-sync with customerProfile whenever CheckoutModal opens or customerProfile updates
-  React.useEffect(() => {
-    if (isCheckoutOpen) {
-      const current = (customerProfile?.name || customerProfile?.phone) ? customerProfile : loadCustomerProfile();
-      if (current.name) setName(current.name);
-      if (current.phone) setPhone(current.phone);
-      if (current.deliveryAddress) setAddress(current.deliveryAddress);
-      if (current.orderType) setOrderType(current.orderType);
-      if (current.notes) setNotes(current.notes);
+  // Re-sync with latest stored customerProfile whenever CheckoutModal opens
+  useEffect(() => {
+    if (!isCheckoutOpen) return;
 
-      // Defensively match saved address to extract its exact GPS pin
-      const match = (current.savedAddresses || []).find(
-        (a) => a.address.trim() === (current.deliveryAddress || '').trim()
-      );
-      const lat = match?.latitude ?? current.currentLatitude;
-      const lng = match?.longitude ?? current.currentLongitude;
-      const url =
-        match?.mapsUrl ??
-        current.currentMapsUrl ??
-        (lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : undefined);
+    const stored = loadCustomerProfile();
+    const current: CustomerProfile = {
+      ...stored,
+      ...(customerProfile || {}),
+    };
 
-      if (lat && lng) {
-        setGpsData({
-          latitude: lat,
-          longitude: lng,
-          mapsUrl: url,
-        });
-      } else {
-        setGpsData({});
-      }
+    setName(current.name || '');
+    setPhone(current.phone || '');
+    setAddress(current.deliveryAddress || '');
+    setOrderType(current.orderType || 'pickup');
+    setNotes(current.notes || '');
+    if (current.paymentMethod && current.paymentMethod !== paymentMethod) {
+      setPaymentMethod(current.paymentMethod);
     }
-  }, [isCheckoutOpen, customerProfile]);
+
+    // Defensively match saved address to extract its exact GPS pin
+    const match = (current.savedAddresses || []).find(
+      (a) => a.address.trim() === (current.deliveryAddress || '').trim()
+    );
+    const lat = match?.latitude ?? current.currentLatitude;
+    const lng = match?.longitude ?? current.currentLongitude;
+    const url =
+      match?.mapsUrl ??
+      current.currentMapsUrl ??
+      (lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : undefined);
+
+    if (toLatLng(lat, lng)) {
+      setGpsData({
+        latitude: lat,
+        longitude: lng,
+        mapsUrl: url,
+      });
+    } else {
+      setGpsData({});
+    }
+    setErrorMsg(null);
+  }, [isCheckoutOpen]);
+
+  // Auto-acquire GPS in background when Delivery is active and no GPS pin exists yet
+  useEffect(() => {
+    if (!isCheckoutOpen || orderType !== 'delivery') return;
+    if (toLatLng(gpsData.latitude, gpsData.longitude)) return;
+
+    let cancelled = false;
+    acquireAccurateGpsFix({
+      timeoutMs: 9000,
+      refineWindowMs: 2500,
+      targetAccuracyMeters: 25,
+    })
+      .then((fix) => {
+        if (cancelled) return;
+        if (orderTypeRef.current !== 'delivery') return;
+        if (toLatLng(gpsDataRef.current.latitude, gpsDataRef.current.longitude)) return;
+
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
+        const nextGps = {
+          latitude: fix.lat,
+          longitude: fix.lng,
+          mapsUrl,
+        };
+        setGpsData(nextGps);
+        saveCustomerProfile({
+          currentLatitude: nextGps.latitude,
+          currentLongitude: nextGps.longitude,
+          currentMapsUrl: nextGps.mapsUrl,
+        });
+        updateCustomerProfile({
+          currentLatitude: nextGps.latitude,
+          currentLongitude: nextGps.longitude,
+          currentMapsUrl: nextGps.mapsUrl,
+        });
+      })
+      .catch(() => {
+        // Silent background fallback: user can still tap pin/map buttons explicitly
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCheckoutOpen, orderType, gpsData.latitude, gpsData.longitude, updateCustomerProfile]);
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -214,6 +257,7 @@ export const CheckoutModal: React.FC = () => {
       phone: phone.trim(),
       deliveryAddress: address.trim(),
       orderType,
+      paymentMethod,
       notes: notes.trim(),
       currentLatitude: resolvedLat,
       currentLongitude: resolvedLng,
@@ -268,136 +312,6 @@ export const CheckoutModal: React.FC = () => {
     setPendingOrderToConfirm(orderParams);
     setIsCheckoutOpen(false);
     setIsOrderConfirmationOpen(true);
-  };
-
-  const handleOrderHandoff = async (channel: 'whatsapp' | 'line') => {
-    // 1. Check store availability
-    if (!storeAvailability.isOpen) {
-      setIsClosedModalOpen(true);
-      return;
-    }
-
-    // 2. Validate fields
-    if (!validate()) return;
-
-    // 3. Resolve exact GPS
-    const profile = customerProfile?.savedAddresses?.length ? customerProfile : loadCustomerProfile();
-    const matchedSaved = (profile.savedAddresses || []).find(
-      (a) => a.address.trim() === address.trim()
-    );
-
-    const resolvedLat = gpsData.latitude ?? matchedSaved?.latitude ?? profile.currentLatitude;
-    const resolvedLng = gpsData.longitude ?? matchedSaved?.longitude ?? profile.currentLongitude;
-    const resolvedMapsUrl =
-      gpsData.mapsUrl ??
-      matchedSaved?.mapsUrl ??
-      profile.currentMapsUrl ??
-      (resolvedLat && resolvedLng ? `https://www.google.com/maps/search/?api=1&query=${resolvedLat},${resolvedLng}` : undefined);
-
-    const updatedProfile: CustomerProfile = {
-      name: name.trim(),
-      phone: phone.trim(),
-      deliveryAddress: address.trim(),
-      orderType,
-      notes: notes.trim(),
-      currentLatitude: resolvedLat,
-      currentLongitude: resolvedLng,
-      currentMapsUrl: resolvedMapsUrl,
-    };
-    saveCustomerProfile(updatedProfile);
-    updateCustomerProfile(updatedProfile);
-
-    // 4. Generate structured order message
-    const orderMessage = generateOrderMessage({
-      settings,
-      customer: updatedProfile,
-      items: cart,
-      subtotal: cartSubtotal,
-      total: cartSubtotal,
-      lang: language,
-    });
-
-    const whatsAppUrl = buildWhatsAppUrl(settings.whatsAppIntlNumber, orderMessage);
-    const lineUrl = buildLineUrl(settings.lineId);
-
-    // Save into on-device order history as proof
-    try {
-      const externalOrderSnapshot: RestaurantOrder = {
-        id: `ext_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        orderNumber: 0,
-        orderNumberFormatted: channel === 'line' ? 'LINE Order' : 'WhatsApp Order',
-        source: channel,
-        status: 'pending',
-        orderType,
-        paymentMethod,
-        customer: updatedProfile,
-        items: cart.map((item) => ({
-          menuItemId: item.menuItemId,
-          name: item.menuItemName,
-          imageUrl: item.imageUrl,
-          basePrice: item.basePrice,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          selectedMainOption: item.selectedMainOption,
-          subtotal: item.subtotal,
-          selectedModifiers: item.selectedModifiers.map((mod) => ({
-            groupId: mod.groupId,
-            groupName: mod.groupName,
-            optionId: mod.optionId,
-            optionName: mod.optionName,
-            priceAdjustment: mod.priceAdjustment,
-          })),
-          specialRequest: item.specialRequest,
-        })),
-        subtotal: cartSubtotal,
-        total: cartSubtotal,
-        currencySymbol: settings.currencySymbol || '฿',
-        createdAt: new Date().toISOString(),
-      };
-      saveCustomerOrder(externalOrderSnapshot);
-    } catch (e) {
-      console.warn('Failed to save external order to local history:', e);
-    }
-
-    // 5. Channel execution
-    if (channel === 'whatsapp') {
-      try {
-        confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
-      } catch {}
-
-      setLastOrderInfo({
-        message: orderMessage,
-        channel: 'whatsapp',
-        whatsAppUrl,
-      });
-
-      // Launch WhatsApp
-      window.open(whatsAppUrl, '_blank');
-      setIsCheckoutOpen(false);
-      clearCart();
-    } else if (channel === 'line') {
-      // Copy to clipboard
-      try {
-        await navigator.clipboard.writeText(orderMessage);
-      } catch (e) {
-        console.warn('Clipboard write failed, fallback provided in success modal', e);
-      }
-
-      try {
-        confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
-      } catch {}
-
-      setLastOrderInfo({
-        message: orderMessage,
-        channel: 'line',
-        lineUrl,
-      });
-
-      // Attempt to open LINE chat
-      window.open(lineUrl, '_blank');
-      setIsCheckoutOpen(false);
-      clearCart();
-    }
   };
 
   return (
@@ -656,47 +570,6 @@ export const CheckoutModal: React.FC = () => {
                 </div>
               </div>
             </button>
-
-            {/* Separator */}
-            {(settings.channels.whatsApp || settings.channels.line) && (
-              <div className="relative py-1">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-[10px] uppercase font-bold text-gray-400">
-                  <span className="bg-white px-2">{t('orOrderViaMessaging')}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Secondary Messaging Buttons (WhatsApp & LINE) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Send via WhatsApp Button */}
-              {settings.channels.whatsApp && (
-                <button
-                  type="button"
-                  id="send-whatsapp-btn"
-                  onClick={() => handleOrderHandoff('whatsapp')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-[#25D366] text-white font-bold text-xs hover:bg-[#1EBE5D] active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{t('chatWhatsApp')}</span>
-                </button>
-              )}
-
-              {/* Send via LINE Button */}
-              {settings.channels.line && (
-                <button
-                  type="button"
-                  id="send-line-btn"
-                  onClick={() => handleOrderHandoff('line')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-[#06C755] text-white font-bold text-xs hover:bg-[#05B34C] active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{t('chatLine')}</span>
-                </button>
-              )}
-            </div>
           </div>
         </motion.div>
       </div>
