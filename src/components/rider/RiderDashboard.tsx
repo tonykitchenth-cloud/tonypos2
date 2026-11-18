@@ -19,7 +19,7 @@ import {
   ChevronUp,
   Map,
 } from 'lucide-react';
-import { InteractiveMapModal } from '../customer/InteractiveMapModal';
+import { RiderRouteMapModal } from './RiderRouteMapModal';
 import { RiderInstallButton } from './RiderInstallButton';
 
 export const RiderDashboard: React.FC = () => {
@@ -345,19 +345,16 @@ export const RiderDashboard: React.FC = () => {
                                 </div>
                               </>
                             ) : (
-                              /* Fallback text search if no GPS pin */
-                              <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                  order.customer?.deliveryAddress || ''
-                                )}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                              /* Open fullscreen in-app route map with automatic address geocoding & Back button */
+                              <button
+                                type="button"
+                                id={`btn-rider-open-map-${order.id}`}
+                                onClick={() => setMapModalOrder(order)}
+                                className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 active:scale-[0.99] border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                               >
                                 <Navigation className="w-4 h-4 text-blue-400" />
-                                <span>{language === 'th' ? 'เปิดแผนที่ค้นหาที่อยู่ (Google Maps)' : 'Search Address on Google Maps'}</span>
-                                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                              </a>
+                                <span>{language === 'th' ? 'เปิดแผนที่ค้นหาที่อยู่ (Google Maps)' : 'Open Route Map & Search Address'}</span>
+                              </button>
                             )}
                           </div>
                         )}
@@ -513,20 +510,12 @@ export const RiderDashboard: React.FC = () => {
         )}
       </main>
 
-      {/* In-App Interactive Map Modal for Rider */}
+      {/* Fullscreen In-App Route Map Modal for Rider */}
       {mapModalOrder && (
-        <InteractiveMapModal
+        <RiderRouteMapModal
           isOpen={Boolean(mapModalOrder)}
           onClose={() => setMapModalOrder(null)}
-          initialLat={mapModalOrder.customer?.latitude}
-          initialLng={mapModalOrder.customer?.longitude}
-          isViewOnly={true}
-          title={
-            language === 'th'
-              ? `หมุดจัดส่งของออเดอร์ ${mapModalOrder.orderNumberFormatted}`
-              : `Delivery Pin for ${mapModalOrder.orderNumberFormatted}`
-          }
-          addressText={mapModalOrder.customer?.deliveryAddress}
+          order={mapModalOrder}
           language={language}
         />
       )}
