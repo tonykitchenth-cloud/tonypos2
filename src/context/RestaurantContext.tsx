@@ -60,7 +60,21 @@ import {
   playCustomerReadySound,
 } from '../utils/soundAlarm';
 import { notificationSoundService } from '../services/notificationSoundService';
+import {
+  GpsFixResult,
+  AcquireGpsOptions,
+  acquireAccurateGpsFix,
+  formatGeolocationError,
+  resolveGeolocationErrorMessage,
+  isIOSDevice,
+  toLatLng,
+} from '../utils/geolocation';
 import { t, translations } from '../i18n/translations';
+
+export interface RequestGpsLocationOptions extends AcquireGpsOptions {
+  /** Persist verified accurate fixes (<= 100m) directly to customerProfile coordinates */
+  syncToCustomerProfile?: boolean;
+}
 
 interface RestaurantContextType {
   // Localization
@@ -159,6 +173,13 @@ interface RestaurantContextType {
     lineUrl?: string;
   } | null;
   setLastOrderInfo: (info: { message: string; channel: 'whatsapp' | 'line'; whatsAppUrl?: string; lineUrl?: string } | null) => void;
+
+  // High-Accuracy Geolocation Strategy State & Actions
+  gpsLocation: GpsFixResult | null;
+  isAcquiringGps: boolean;
+  gpsError: string | null;
+  requestCurrentGpsLocation: (options?: RequestGpsLocationOptions) => Promise<GpsFixResult>;
+  clearGpsError: () => void;
 
   // Data Actions
   resetDemoData: () => void;
@@ -297,6 +318,168 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const setLanguage = useCallback((newLang: Language) => {
     setLanguageState(newLang);
     saveLanguage(newLang);
+  }, []);
+
+  // Centralized iOS-hardened High-Accuracy Geolocation State & Strategy
+  const [gpsLocation, setGpsLocation] = useState<GpsFixResult | null>(null);
+  const [isAcquiringGps, setIsAcquiringGps] = useState<boolean>(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const gpsAbortControllerRef = useRef<AbortController | null>(null);
+  const gpsRequestIdRef = useRef<number>(0);
+  const languageRef = useRef<Language>(language);
+  languageRef.current = language;
+
+  useEffect(() => {
+    return () => {
+      if (gpsAbortControllerRef.current) {
+        gpsAbortControllerRef.current.abort();
+        gpsAbortControllerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearGpsError = useCallback(() => {
+    setGpsError(null);
+  }, []);
+
+  const requestCurrentGpsLocation = useCallback((options: RequestGpsLocationOptions = {}): Promise<GpsFixResult> => {
+    const isThai = languageRef.current === 'th';
+
+    if (options.signal?.aborted) {
+      return Promise.reject({
+        code: 3,
+        name: 'AbortError',
+        message: 'Location request was aborted.',
+      });
+    }
+
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.geolocation ||
+      typeof navigator.geolocation.getCurrentPosition !== 'function'
+    ) {
+      const msg = isThai ? 'อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับ GPS' : 'Geolocation is not supported by this browser.';
+      setGpsError(msg);
+      return Promise.reject({
+        code: 2,
+        message: msg,
+        resolvedMessage: msg,
+      });
+    }
+
+    // Cancel any previous in-flight GPS lock so CoreLocation on iOS never contends or hangs
+    if (gpsAbortControllerRef.current) {
+      gpsAbortControllerRef.current.abort();
+    }
+
+    const requestId = ++gpsRequestIdRef.current;
+    const localController = new AbortController();
+    gpsAbortControllerRef.current = localController;
+
+    const externalSignal = options.signal;
+    const onExternalAbort = () => {
+      localController.abort();
+    };
+    if (externalSignal) {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    const ios = isIOSDevice();
+    const timeoutMs = options.timeoutMs ?? (ios ? 15000 : 12000);
+    const refineWindowMs = options.refineWindowMs ?? (ios ? 4500 : 3200);
+    const targetAccuracyMeters = options.targetAccuracyMeters ?? 20;
+    const allowCoarseFallback = options.allowCoarseFallback ?? !ios;
+
+    setIsAcquiringGps(true);
+    setGpsError(null);
+
+    const persistIfVerified = (fix: GpsFixResult) => {
+      if (!options.syncToCustomerProfile) return;
+      // Guard against saving coarse iOS cell/Wi-Fi guesses (> 100m) as a permanent pin
+      if (fix.accuracy > 100 || !toLatLng(fix.lat, fix.lng)) return;
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
+      saveCustomerProfile({
+        currentLatitude: fix.lat,
+        currentLongitude: fix.lng,
+        currentMapsUrl: mapsUrl,
+      });
+      setCustomerProfileState((prev) => ({
+        ...prev,
+        currentLatitude: fix.lat,
+        currentLongitude: fix.lng,
+        currentMapsUrl: mapsUrl,
+      }));
+    };
+
+    // Synchronously initiate high-accuracy getCurrentPosition (enableHighAccuracy: true) + watchPosition
+    // before any async permission check so iOS Safari preserves the user-gesture token.
+    return acquireAccurateGpsFix({
+      timeoutMs,
+      refineWindowMs,
+      targetAccuracyMeters,
+      allowCoarseFallback,
+      signal: localController.signal,
+      onProgress: (fix) => {
+        if (gpsRequestIdRef.current !== requestId || localController.signal.aborted) return;
+        if (fix.accuracy <= 150) {
+          setGpsLocation(fix);
+        }
+        options.onProgress?.(fix);
+      },
+    })
+      .then((bestFix) => {
+        if (gpsRequestIdRef.current === requestId && !localController.signal.aborted) {
+          setGpsLocation(bestFix);
+          persistIfVerified(bestFix);
+
+          if (bestFix.accuracy > (ios ? 150 : 200)) {
+            const impreciseMsg = ios
+              ? isThai
+                ? `ตำแหน่ง iOS คลาดเคลื่อน ±${bestFix.accuracy} ม. กรุณาเปิด "ตำแหน่งที่ตั้งจริง (Precise Location)" ในตั้งค่า iPhone หรือเลื่อนหมุดบนแผนที่`
+                : `iOS GPS accuracy ±${bestFix.accuracy}m. Enable "Precise Location" in iPhone Settings or adjust the pin on the map.`
+              : isThai
+              ? `จับตำแหน่งได้คลาดเคลื่อน ±${bestFix.accuracy} ม. แนะนำให้เลื่อนหมุดบนแผนที่เพื่อความแม่นยำ`
+              : `GPS accuracy ±${bestFix.accuracy}m. Adjust pin on the map for exact location.`;
+            setGpsError(impreciseMsg);
+          } else {
+            setGpsError(null);
+          }
+        }
+        return bestFix;
+      })
+      .catch(async (err: any) => {
+        if (localController.signal.aborted || err?.name === 'AbortError') {
+          throw err;
+        }
+
+        const immediateMsg = formatGeolocationError(err, isThai);
+        if (gpsRequestIdRef.current === requestId) {
+          setGpsError(immediateMsg);
+        }
+
+        const resolvedMsg = await resolveGeolocationErrorMessage(err, isThai).catch(() => immediateMsg);
+        if (gpsRequestIdRef.current === requestId && !localController.signal.aborted) {
+          setGpsError(resolvedMsg);
+        }
+
+        if (err && typeof err === 'object') {
+          try {
+            err.resolvedMessage = resolvedMsg;
+          } catch {}
+        }
+        throw err;
+      })
+      .finally(() => {
+        if (externalSignal) {
+          externalSignal.removeEventListener('abort', onExternalAbort);
+        }
+        if (gpsRequestIdRef.current === requestId) {
+          setIsAcquiringGps(false);
+          if (gpsAbortControllerRef.current === localController) {
+            gpsAbortControllerRef.current = null;
+          }
+        }
+      });
   }, []);
 
   // Save appState to local storage fallback quietly without broadcasting loops
@@ -876,6 +1059,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsOwnerAccessModalOpen,
         lastOrderInfo,
         setLastOrderInfo,
+        gpsLocation,
+        isAcquiringGps,
+        gpsError,
+        requestCurrentGpsLocation,
+        clearGpsError,
         resetDemoData,
         exportDataJson,
         importDataJson,

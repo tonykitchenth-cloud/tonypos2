@@ -247,12 +247,14 @@ export interface AcquireGpsOptions {
 
 /**
  * iOS-safe high-accuracy GPS acquisition.
- * - Uses fresh watchPosition (enableHighAccuracy: true, maximumAge: 0).
+ * - Synchronously initiates navigator.geolocation.getCurrentPosition with enableHighAccuracy: true
+ *   (W3C equivalent of highAccuracy: true) alongside fresh watchPosition (enableHighAccuracy: true, maximumAge: 0)
+ *   to wake CoreLocation immediately on iOS Safari / PWA without breaking user gesture chains.
  * - On iOS (Safari / WKWebView / PWA), avoids calling enableHighAccuracy: false while
  *   watchPosition is warming up, because iOS shares a single CoreLocation manager per tab
  *   and enableHighAccuracy: false downgrades accuracy / returns cell-tower approximations.
- * - Filters stale (>25s old) cached CoreLocation readings so old coordinates from an earlier
- *   place don't overwrite the phone's current location.
+ * - Filters stale (>25s old) cached CoreLocation readings and suppresses transient code 2/3 errors
+ *   while CoreLocation locks satellites, plus a hard watchdog timer so requests never stay stuck.
  */
 export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<GpsFixResult> {
   const {
@@ -285,6 +287,16 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     const ios = isIOSDevice();
     const startedAt = Date.now();
     const effectiveRefineWindowMs = ios ? Math.max(refineWindowMs, 4500) : refineWindowMs;
+    const hasGetCurrentPosition = typeof navigator.geolocation.getCurrentPosition === 'function';
+    const hasWatchPosition = typeof navigator.geolocation.watchPosition === 'function';
+
+    if (!hasGetCurrentPosition && !hasWatchPosition) {
+      reject({
+        code: 2,
+        message: 'Geolocation API methods are unavailable.',
+      });
+      return;
+    }
 
     let settled = false;
     let watchId: number | null = null;
@@ -296,11 +308,14 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     let coarseDelayTimer: ReturnType<typeof setTimeout> | null = null;
     let delayedProgressTimer: ReturnType<typeof setTimeout> | null = null;
     let hardTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
     const cleanup = () => {
       if (watchId !== null) {
         try {
-          navigator.geolocation.clearWatch(watchId);
+          if (typeof navigator.geolocation.clearWatch === 'function') {
+            navigator.geolocation.clearWatch(watchId);
+          }
         } catch {}
         watchId = null;
       }
@@ -319,6 +334,10 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       if (hardTimer !== null) {
         clearTimeout(hardTimer);
         hardTimer = null;
+      }
+      if (watchdogTimer !== null) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
       }
       if (signal) {
         signal.removeEventListener('abort', onAbort);
@@ -343,6 +362,7 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
     let lastError: GeolocationPositionError | null = null;
 
     const parsePosition = (pos: GeolocationPosition): GpsFixResult | null => {
+      if (!pos || !pos.coords) return null;
       const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
       if (!pt) return null;
 
@@ -384,7 +404,8 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       if (settled) return;
       settled = true;
       cleanup();
-      const chosen = bestFix || coarseFallbackFix || staleFallbackFix;
+      // Never return coarseFallbackFix on iOS; only bestFix or last-resort staleFallbackFix
+      const chosen = bestFix || (!ios ? coarseFallbackFix : null) || staleFallbackFix;
       if (chosen) {
         resolve(chosen);
       } else {
@@ -397,13 +418,61 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       }
     };
 
+    const handleCandidatePosition = (pos: GeolocationPosition, fromSingleShot: boolean) => {
+      if (settled) return;
+      const candidate = parsePosition(pos);
+      if (!candidate) return;
+
+      // Hold stale (>25s old) cached iOS CoreLocation coordinates aside unless timeout expires with nothing fresh
+      if (isStaleReading(candidate.timestamp)) {
+        if (!staleFallbackFix || candidate.accuracy <= staleFallbackFix.accuracy) {
+          staleFallbackFix = candidate;
+        }
+        return;
+      }
+
+      const isBetter = !bestFix || candidate.accuracy <= bestFix.accuracy;
+      if (isBetter) {
+        bestFix = candidate;
+        if (candidate.accuracy <= 150 || Date.now() - startedAt >= 2500) {
+          if (delayedProgressTimer !== null) {
+            clearTimeout(delayedProgressTimer);
+            delayedProgressTimer = null;
+          }
+          onProgress?.(candidate);
+        } else if (delayedProgressTimer === null) {
+          const remaining = Math.max(0, 2500 - (Date.now() - startedAt));
+          delayedProgressTimer = setTimeout(() => {
+            delayedProgressTimer = null;
+            if (!settled && bestFix) {
+              onProgress?.(bestFix);
+            }
+          }, remaining);
+        }
+      }
+
+      // Resolve immediately once target GPS precision is achieved, or when watchPosition is unavailable
+      if (candidate.accuracy <= targetAccuracyMeters || (fromSingleShot && watchId === null)) {
+        finishWithBest();
+        return;
+      }
+
+      // Otherwise allow CoreLocation / GPS chip to refine up to effectiveRefineWindowMs
+      if (refineTimer === null) {
+        refineTimer = setTimeout(() => {
+          finishWithBest();
+        }, effectiveRefineWindowMs);
+      }
+    };
+
     const triggerCoarseFallback = () => {
       if (
         settled ||
         coarseTriggered ||
+        ios ||
         !allowCoarseFallback ||
         bestFix !== null ||
-        typeof navigator.geolocation.getCurrentPosition !== 'function'
+        !hasGetCurrentPosition
       ) {
         return;
       }
@@ -417,13 +486,13 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
             if (!coarseFallbackFix || candidate.accuracy <= coarseFallbackFix.accuracy) {
               coarseFallbackFix = candidate;
             }
-            if (!bestFix && (!ios || Date.now() - startedAt >= 4000)) {
+            if (!bestFix) {
               onProgress?.(candidate);
             }
           },
           (err) => {
             if (!lastError) lastError = err;
-            if (err.code === 1 && !bestFix && !coarseFallbackFix && !staleFallbackFix) {
+            if (err?.code === 1 && !bestFix && !coarseFallbackFix && !staleFallbackFix) {
               settled = true;
               cleanup();
               reject(err);
@@ -442,6 +511,11 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       finishWithBest();
     }, timeoutMs);
 
+    // Secondary watchdog guarantee so a stalled iOS CoreLocation / WKWebView call can never hang forever
+    watchdogTimer = setTimeout(() => {
+      finishWithBest();
+    }, timeoutMs + 500);
+
     // Only run the 2.2s coarse fallback timer on non-iOS devices (e.g. desktops without GPS hardware).
     // On iOS, keep CoreLocation uninterrupted in high-accuracy mode so satellites can lock cleanly.
     if (allowCoarseFallback && !ios) {
@@ -450,86 +524,77 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
       }, 2200);
     }
 
-    try {
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          if (settled) return;
-          const candidate = parsePosition(pos);
-          if (!candidate) return;
+    const highAccuracyOptions: PositionOptions = {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: timeoutMs,
+    };
 
-          // Hold stale (>25s old) cached iOS CoreLocation coordinates aside unless timeout expires with nothing fresh
-          if (isStaleReading(candidate.timestamp)) {
-            if (!staleFallbackFix || candidate.accuracy <= staleFallbackFix.accuracy) {
-              staleFallbackFix = candidate;
+    // Start watchPosition first so watchId is populated if getCurrentPosition resolves synchronously in mocks/browsers
+    if (hasWatchPosition) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            handleCandidatePosition(pos, false);
+          },
+          (err) => {
+            lastError = err;
+            // Permission denied won't recover during this call
+            if (err?.code === 1 && !bestFix && !coarseFallbackFix && !staleFallbackFix) {
+              settled = true;
+              cleanup();
+              reject(err);
+              return;
             }
-            return;
-          }
-
-          const isBetter = !bestFix || candidate.accuracy <= bestFix.accuracy;
-          if (isBetter) {
-            bestFix = candidate;
-            if (candidate.accuracy <= 150 || Date.now() - startedAt >= 2500) {
-              if (delayedProgressTimer !== null) {
-                clearTimeout(delayedProgressTimer);
-                delayedProgressTimer = null;
+            // On non-iOS (e.g. desktop PCs without GPS hardware), trigger coarse fallback on code 2.
+            // On iOS, code 2/3 can occur transiently while CoreLocation warms up, so keep waiting cleanly.
+            if (err?.code === 2 && allowCoarseFallback && !ios && !bestFix) {
+              if (coarseFallbackFix) {
+                finishWithBest();
+              } else {
+                triggerCoarseFallback();
               }
-              onProgress?.(candidate);
-            } else if (delayedProgressTimer === null) {
-              const remaining = Math.max(0, 2500 - (Date.now() - startedAt));
-              delayedProgressTimer = setTimeout(() => {
-                delayedProgressTimer = null;
-                if (!settled && bestFix) {
-                  onProgress?.(bestFix);
-                }
-              }, remaining);
             }
-          }
+          },
+          highAccuracyOptions
+        );
+      } catch (err) {
+        if (!lastError) lastError = err as GeolocationPositionError;
+        watchId = null;
+      }
+    }
 
-          // If we achieved target GPS precision, resolve immediately!
-          if (candidate.accuracy <= targetAccuracyMeters) {
-            finishWithBest();
-            return;
-          }
-
-          // Otherwise let CoreLocation / GPS chip warm up for effectiveRefineWindowMs
-          if (refineTimer === null) {
-            refineTimer = setTimeout(() => {
-              finishWithBest();
-            }, effectiveRefineWindowMs);
-          }
-        },
-        (err) => {
-          lastError = err;
-          // Permission denied won't recover during this call
-          if (err.code === 1 && !bestFix && !coarseFallbackFix) {
-            settled = true;
-            cleanup();
-            reject(err);
-            return;
-          }
-          // On non-iOS (e.g. desktop PCs without GPS hardware), trigger coarse fallback immediately on code 2.
-          // On iOS, code 2 can happen briefly while CoreLocation initializes, so wait until near end of wait window.
-          if (err.code === 2 && allowCoarseFallback && !bestFix) {
-            if (coarseFallbackFix) {
-              finishWithBest();
-            } else if (!ios || Date.now() - startedAt >= Math.min(4500, timeoutMs * 0.6)) {
-              triggerCoarseFallback();
+    // Invoke synchronous high-accuracy getCurrentPosition to wake iOS CoreLocation & trigger OS permission promptly
+    if (hasGetCurrentPosition && !settled) {
+      try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            handleCandidatePosition(pos, true);
+          },
+          (err) => {
+            if (!lastError) lastError = err;
+            if (err?.code === 1 && !bestFix && !coarseFallbackFix && !staleFallbackFix) {
+              settled = true;
+              cleanup();
+              reject(err);
+              return;
             }
-          }
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: timeoutMs,
+            // If watchPosition failed to start/is missing and getCurrentPosition errored, trigger coarse (non-iOS) or fail cleanly
+            if (watchId === null && !settled) {
+              if (allowCoarseFallback && !ios && err?.code === 2) {
+                triggerCoarseFallback();
+              } else {
+                finishWithBest();
+              }
+            }
+          },
+          highAccuracyOptions
+        );
+      } catch (err) {
+        if (!lastError) lastError = err as GeolocationPositionError;
+        if (watchId === null && !settled) {
+          finishWithBest();
         }
-      );
-    } catch (err) {
-      cleanup();
-      if (coarseFallbackFix || staleFallbackFix) {
-        settled = true;
-        resolve((coarseFallbackFix || staleFallbackFix)!);
-      } else {
-        reject(err);
       }
     }
   });

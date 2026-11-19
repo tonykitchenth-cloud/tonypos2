@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SavedDeliveryAddress, Language } from '../../types';
 import { loadCustomerProfile, saveCustomerProfile } from '../../utils/storage';
+import { useRestaurant } from '../../context/RestaurantContext';
 import {
-  acquireAccurateGpsFix,
   formatGeolocationError,
   resolveGeolocationErrorMessage,
   isIOSDevice,
@@ -48,6 +48,7 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
   onGpsChange,
 }) => {
   const isThai = language === 'th';
+  const { requestCurrentGpsLocation } = useRestaurant();
 
   // Load saved addresses from customer profile storage
   const [savedAddresses, setSavedAddresses] = useState<SavedDeliveryAddress[]>(() => {
@@ -99,7 +100,17 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
 
   // Quick GPS detection state
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const quickLocateRequestIdRef = useRef<number>(0);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (gpsAbortControllerRef.current) {
+        gpsAbortControllerRef.current.abort();
+        gpsAbortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   // Sync external GPS props
   useEffect(() => {
@@ -179,9 +190,9 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
       }
     };
 
-    const promise = acquireAccurateGpsFix({
-      timeoutMs: 13000,
-      refineWindowMs: 4000,
+    const promise = requestCurrentGpsLocation({
+      timeoutMs: isIOSDevice() ? 15000 : 13000,
+      refineWindowMs: 4500,
       targetAccuracyMeters: 25,
       allowCoarseFallback: !isIOSDevice(),
       signal: controller.signal,
@@ -355,9 +366,9 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
         const controller = new AbortController();
         gpsAbortControllerRef.current = controller;
 
-        const directPromise = acquireAccurateGpsFix({
-          timeoutMs: 14000,
-          refineWindowMs: 4200,
+        const directPromise = requestCurrentGpsLocation({
+          timeoutMs: isIOSDevice() ? 15000 : 14000,
+          refineWindowMs: 4500,
           targetAccuracyMeters: 25,
           allowCoarseFallback: !isIOSDevice(),
           signal: controller.signal,
@@ -426,18 +437,19 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
     const controller = new AbortController();
     gpsAbortControllerRef.current = controller;
 
+    const locateReqId = ++quickLocateRequestIdRef.current;
     setIsLocating(true);
     setFormError(null);
 
-    acquireAccurateGpsFix({
-      timeoutMs: 14000,
-      refineWindowMs: 4200,
+    requestCurrentGpsLocation({
+      timeoutMs: isIOSDevice() ? 15000 : 14000,
+      refineWindowMs: 4500,
       targetAccuracyMeters: 20,
       allowCoarseFallback: !isIOSDevice(),
       signal: controller.signal,
     })
       .then((fix) => {
-        setIsLocating(false);
+        if (controller.signal.aborted) return;
         const pinUrl = `https://www.google.com/maps/search/?api=1&query=${fix.lat},${fix.lng}`;
 
         if (target === 'form') {
@@ -474,23 +486,30 @@ export const DeliveryAddressManager: React.FC<DeliveryAddressManagerProps> = ({
         }
       })
       .catch((err) => {
-        setIsLocating(false);
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
         console.warn('Geolocation error:', err);
-        const fallbackMsg = formatGeolocationError(err, isThai);
+        const fallbackMsg = err?.resolvedMessage || formatGeolocationError(err, isThai);
         if (target === 'form') {
           setFormError(fallbackMsg);
         } else {
           setFeedbackNotice(fallbackMsg);
           setTimeout(() => setFeedbackNotice(null), 5000);
         }
-        resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
-          if (resolvedMsg === fallbackMsg) return;
-          if (target === 'form') {
-            setFormError(resolvedMsg);
-          } else {
-            setFeedbackNotice(resolvedMsg);
-          }
-        });
+        if (!err?.resolvedMessage) {
+          resolveGeolocationErrorMessage(err, isThai).then((resolvedMsg) => {
+            if (controller.signal.aborted || resolvedMsg === fallbackMsg) return;
+            if (target === 'form') {
+              setFormError(resolvedMsg);
+            } else {
+              setFeedbackNotice(resolvedMsg);
+            }
+          });
+        }
+      })
+      .finally(() => {
+        if (quickLocateRequestIdRef.current === locateReqId) {
+          setIsLocating(false);
+        }
       });
   };
 

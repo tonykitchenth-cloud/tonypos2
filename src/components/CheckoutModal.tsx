@@ -3,7 +3,7 @@ import { useRestaurant } from '../context/RestaurantContext';
 import { CustomerProfile, OrderType, OrderItemSnapshot } from '../types';
 import { formatCurrency } from '../utils/pricing';
 import { CreateOrderParams, createRestaurantOrder } from '../utils/orderSync';
-import { acquireAccurateGpsFix, toLatLng } from '../utils/geolocation';
+import { toLatLng } from '../utils/geolocation';
 import { loadCustomerProfile, saveCustomerProfile } from '../utils/storage';
 import { DeliveryAddressManager } from './customer/DeliveryAddressManager';
 import {
@@ -37,6 +37,7 @@ export const CheckoutModal: React.FC = () => {
     clearCart,
     setActiveOrderId,
     setIsOrderStatusOpen,
+    requestCurrentGpsLocation,
     t,
   } = useRestaurant();
 
@@ -126,8 +127,8 @@ export const CheckoutModal: React.FC = () => {
 
     let cancelled = false;
     const controller = new AbortController();
-    acquireAccurateGpsFix({
-      timeoutMs: 10000,
+    requestCurrentGpsLocation({
+      timeoutMs: 12000,
       refineWindowMs: 3200,
       targetAccuracyMeters: 25,
       allowCoarseFallback: false,
@@ -166,7 +167,7 @@ export const CheckoutModal: React.FC = () => {
       cancelled = true;
       controller.abort();
     };
-  }, [isCheckoutOpen, orderType, gpsData.latitude, gpsData.longitude, updateCustomerProfile]);
+  }, [isCheckoutOpen, orderType, gpsData.latitude, gpsData.longitude, updateCustomerProfile, requestCurrentGpsLocation]);
 
   const handleNameChange = (val: string) => {
     setName(val);
