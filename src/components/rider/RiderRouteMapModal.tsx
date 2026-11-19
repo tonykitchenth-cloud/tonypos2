@@ -27,6 +27,7 @@ import {
   Compass,
   Crosshair,
   RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   LatLngPoint,
@@ -36,7 +37,6 @@ import {
   formatGeolocationError,
   acquireAccurateGpsFix,
   buildGoogleMapsNavigationUrl,
-  shouldUseTopLevelMapsHandoff,
 } from '../../utils/geolocation';
 
 interface RiderRouteMapModalProps {
@@ -44,6 +44,8 @@ interface RiderRouteMapModalProps {
   onClose: () => void;
   order: RestaurantOrder | null;
   language?: 'th' | 'en';
+  onMarkDelivered?: (order: RestaurantOrder) => Promise<void> | void;
+  isSubmittingDelivered?: boolean;
 }
 
 interface RouteStep {
@@ -353,6 +355,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
   onClose,
   order,
   language = 'th',
+  onMarkDelivered,
+  isSubmittingDelivered = false,
 }) => {
   const isThai = language === 'th';
   const { settings } = useRestaurant();
@@ -1130,13 +1134,6 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     address: deliveryAddress,
   });
 
-  const handleOpenExternalGoogleMaps = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (shouldUseTopLevelMapsHandoff()) {
-      e.preventDefault();
-      window.location.assign(externalGoogleMapsUrl);
-    }
-  };
-
   return (
     <div
       id="rider-fullscreen-route-modal"
@@ -1156,7 +1153,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             className="px-3 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-95 text-[#FFFFFF] font-black text-xs flex items-center gap-1.5 border border-[#404040] transition-all cursor-pointer shrink-0 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>{isThai ? 'ย้อนกลับ' : 'Back'}</span>
+            <span>{isThai ? 'ย้อนกลับหน้า Rider' : 'Back to Rider'}</span>
           </button>
 
           <div className="min-w-0">
@@ -1563,26 +1560,48 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           </button>
         </div>
 
-        {/* Bottom Action Buttons: Back + Open External Google Maps */}
+        {/* Bottom Action Buttons: Job Done + Back to Rider + Open External Google Maps */}
+        {onMarkDelivered && (
+          <button
+            type="button"
+            id="btn-rider-map-delivered"
+            disabled={isSubmittingDelivered}
+            onClick={() => onMarkDelivered(order)}
+            className="w-full py-3 px-4 rounded-xl bg-[#059669] hover:bg-[#047857] disabled:bg-[#065F46] active:scale-[0.99] border-2 border-[#34D399] text-[#FFFFFF] font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
+          >
+            {isSubmittingDelivered ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-[#FFFFFF]" />
+                <span>{isThai ? 'กำลังบันทึก...' : 'Updating...'}</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-5 h-5 stroke-[2.5] text-[#FFFFFF]" />
+                <span>{isThai ? 'ส่งเรียบร้อยแล้ว (Job Done)' : 'Delivered (Job Done)'}</span>
+              </>
+            )}
+          </button>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
+            id="btn-rider-map-footer-back"
             onClick={onClose}
             className="py-2.5 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-[0.99] border border-[#404040] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>{isThai ? 'ย้อนกลับหน้ารายการ' : 'Back to Orders'}</span>
+            <span>{isThai ? 'ย้อนกลับหน้า Rider' : 'Back to Rider'}</span>
           </button>
 
           <a
             href={externalGoogleMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={handleOpenExternalGoogleMaps}
             className="py-2.5 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
           >
             <Navigation className="w-4 h-4" />
-            <span>{isThai ? 'นำทางผ่าน Google Maps' : 'Open Google Maps'}</span>
+            <span>{isThai ? 'นำทาง Google Maps' : 'Google Maps'}</span>
             <ExternalLink className="w-3 h-3 opacity-80" />
           </a>
         </div>

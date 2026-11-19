@@ -18,14 +18,23 @@ import {
   ChevronDown,
   ChevronUp,
   Map,
+  ArrowLeft,
 } from 'lucide-react';
 import { RiderRouteMapModal } from './RiderRouteMapModal';
 import {
   toLatLng,
   extractCoordsFromMapsUrl,
   buildGoogleMapsNavigationUrl,
-  shouldUseTopLevelMapsHandoff,
 } from '../../utils/geolocation';
+
+export function filterActiveRiderOrders(orders: RestaurantOrder[]): RestaurantOrder[] {
+  return orders
+    .filter((order) => {
+      if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') return false;
+      return order.orderType === 'delivery' && order.status === 'on_the_way';
+    })
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
 
 export const RiderDashboard: React.FC = () => {
   const { allOrders, language } = useRestaurant();
@@ -33,24 +42,18 @@ export const RiderDashboard: React.FC = () => {
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [justCompletedOrderId, setJustCompletedOrderId] = useState<string | null>(null);
+  const [navigatingOrderId, setNavigatingOrderId] = useState<string | null>(null);
   const [mapModalOrder, setMapModalOrder] = useState<RestaurantOrder | null>(null);
 
-  // Filter orders for delivery:
-  // Active deliveries: orders that are delivery type AND status is 'on_the_way' (or 'accepted' if dispatched)
+  // Active deliveries: strictly delivery orders ONLY after the restaurant presses "On the way"
   const activeDeliveryOrders = useMemo(() => {
-    return allOrders.filter((order) => {
-      if (order.orderNumber === 1027 || order.orderNumberFormatted === '#1027') return false;
-      const isDelivery = order.orderType === 'delivery';
-      // Prioritize orders on the way, or accepted delivery orders
-      const isOnDelivery = order.status === 'on_the_way' || (isDelivery && order.status === 'accepted');
-      return isDelivery && isOnDelivery;
-    }).sort((a, b) => {
-      // Prioritize on_the_way first, then by creation time
-      if (a.status === 'on_the_way' && b.status !== 'on_the_way') return -1;
-      if (b.status === 'on_the_way' && a.status !== 'on_the_way') return 1;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
+    return filterActiveRiderOrders(allOrders);
   }, [allOrders]);
+
+  const navigatingOrder = useMemo(() => {
+    if (!navigatingOrderId) return null;
+    return activeDeliveryOrders.find((order) => order.id === navigatingOrderId) || null;
+  }, [activeDeliveryOrders, navigatingOrderId]);
 
   // Today's completed delivery orders
   const completedTodayOrders = useMemo(() => {
@@ -71,14 +74,10 @@ export const RiderDashboard: React.FC = () => {
     }));
   };
 
-  const handleDirectGoogleMapsNav = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    navUrl: string
-  ) => {
-    if (shouldUseTopLevelMapsHandoff()) {
-      e.preventDefault();
-      window.location.assign(navUrl);
-    }
+  // Track which order is being navigated in external Google Maps without unloading/replacing
+  // the Rider window (preserving target="_blank" so iOS/Android Back returns straight here for Job Done).
+  const handleDirectGoogleMapsNav = (orderId: string) => {
+    setNavigatingOrderId(orderId);
   };
 
   // Handle Rider marking the order as Delivered
@@ -90,6 +89,12 @@ export const RiderDashboard: React.FC = () => {
       // 1. Update order status to 'completed' in Firestore and BroadcastChannel
       await updateOrderStatus(order.id, 'completed');
       setJustCompletedOrderId(order.id);
+      if (navigatingOrderId === order.id) {
+        setNavigatingOrderId(null);
+      }
+      if (mapModalOrder?.id === order.id) {
+        setMapModalOrder(null);
+      }
 
       // Brief visual celebration
       setTimeout(() => {
@@ -143,6 +148,61 @@ export const RiderDashboard: React.FC = () => {
 
       {/* 2. Main Content Container */}
       <main className="max-w-xl mx-auto p-4 space-y-4">
+        {/* Active Navigation Return & Quick Job Done Banner (stays ready when returning from full-screen Google Maps) */}
+        {navigatingOrder && (
+          <div
+            id="rider-nav-return-banner"
+            className="p-4 rounded-2xl bg-[#1E3A8A] border-2 border-[#60A5FA] text-[#FFFFFF] space-y-3 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md bg-[#2563EB] text-[#FFFFFF] font-mono font-black text-xs">
+                    {navigatingOrder.orderNumberFormatted}
+                  </span>
+                  <span className="text-xs font-black text-[#DBEAFE]">
+                    {language === 'th' ? 'กำลังนำทางผ่าน Google Maps' : 'Navigating in Google Maps'}
+                  </span>
+                </div>
+                <p className="text-sm font-extrabold text-[#FFFFFF] mt-1 truncate">
+                  {navigatingOrder.customer?.name || 'Customer'}
+                </p>
+                <p className="text-[11px] text-[#BFDBFE] mt-0.5 leading-snug">
+                  {language === 'th'
+                    ? 'หลังนำทางเสร็จ กดปุ่ม Back / เสร็จสิ้น (Done) กลับมาหน้านี้เพื่อกดปุ่มส่งเรียบร้อยแล้ว (Job Done)'
+                    : 'Return from Google Maps using Back / Done, then tap Delivered (Job Done) below.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                id="btn-rider-nav-back"
+                onClick={() => {
+                  setNavigatingOrderId(null);
+                  setActiveTab('delivering');
+                }}
+                className="py-2.5 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#525252] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>{language === 'th' ? 'ย้อนกลับหน้ารายการ' : 'Back to Rider'}</span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-rider-nav-job-done"
+                disabled={submittingOrderId === navigatingOrder.id}
+                onClick={() => handleMarkAsDelivered(navigatingOrder)}
+                className="py-2.5 px-3 rounded-xl bg-[#059669] hover:bg-[#047857] disabled:bg-[#065F46] border border-[#34D399] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                <span>{language === 'th' ? 'ส่งเรียบร้อยแล้ว (Job Done)' : 'Delivered (Job Done)'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Success Alert Banner when order completed */}
         {justCompletedOrderId && (
           <div className="p-4 rounded-2xl bg-[#064E3B] border border-[#10B981] text-[#FFFFFF] flex items-center gap-3 shadow-xl">
@@ -349,7 +409,7 @@ export const RiderDashboard: React.FC = () => {
                                     href={googleNavUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    onClick={(e) => handleDirectGoogleMapsNav(e, googleNavUrl)}
+                                    onClick={() => handleDirectGoogleMapsNav(order.id)}
                                     className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-[#FFFFFF] border border-[#60A5FA] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95 cursor-pointer"
                                   >
                                     <Navigation className="w-4 h-4 text-[#FFFFFF]" />
@@ -378,7 +438,7 @@ export const RiderDashboard: React.FC = () => {
                                   href={googleNavUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  onClick={(e) => handleDirectGoogleMapsNav(e, googleNavUrl)}
+                                  onClick={() => handleDirectGoogleMapsNav(order.id)}
                                   className="w-full py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
                                 >
                                   <Navigation className="w-4 h-4 text-[#FFFFFF]" />
@@ -559,6 +619,8 @@ export const RiderDashboard: React.FC = () => {
           onClose={() => setMapModalOrder(null)}
           order={mapModalOrder}
           language={language}
+          onMarkDelivered={handleMarkAsDelivered}
+          isSubmittingDelivered={submittingOrderId === mapModalOrder.id}
         />
       )}
     </div>
