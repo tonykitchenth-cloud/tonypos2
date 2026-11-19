@@ -35,6 +35,8 @@ import {
   shouldAcceptGpsUpdate,
   formatGeolocationError,
   acquireAccurateGpsFix,
+  buildGoogleMapsNavigationUrl,
+  shouldUseTopLevelMapsHandoff,
 } from '../../utils/geolocation';
 
 interface RiderRouteMapModalProps {
@@ -1121,27 +1123,37 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  const externalGoogleMapsUrl = destPoint
-    ? `https://www.google.com/maps/dir/?api=1&destination=${destPoint.lat},${destPoint.lng}&travelmode=driving`
-    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddress)}&travelmode=driving`;
+  const externalGoogleMapsUrl = buildGoogleMapsNavigationUrl({
+    latitude: destPoint?.lat,
+    longitude: destPoint?.lng,
+    mapsUrl: order.customer?.mapsUrl,
+    address: deliveryAddress,
+  });
+
+  const handleOpenExternalGoogleMaps = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (shouldUseTopLevelMapsHandoff()) {
+      e.preventDefault();
+      window.location.assign(externalGoogleMapsUrl);
+    }
+  };
 
   return (
     <div
       id="rider-fullscreen-route-modal"
-      className="fixed inset-0 z-60 w-screen h-[100dvh] bg-neutral-950 text-white flex flex-col overflow-hidden"
+      className="fixed inset-0 z-60 w-screen h-[100dvh] bg-[#0A0A0A] text-[#FFFFFF] flex flex-col overflow-hidden"
       style={{
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       {/* 1. Compact Header with Prominent Back Button + Order + Call */}
-      <header className="bg-neutral-900 border-b border-neutral-800 px-3 sm:px-4 py-2 flex items-center justify-between gap-2 shrink-0 z-30 shadow-md">
+      <header className="bg-[#171717] border-b border-[#262626] px-3 sm:px-4 py-2 flex items-center justify-between gap-2 shrink-0 z-30 shadow-md">
         <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             id="btn-rider-map-back"
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 border border-neutral-700 transition-all cursor-pointer shrink-0 shadow-sm"
+            className="px-3 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-95 text-[#FFFFFF] font-black text-xs flex items-center gap-1.5 border border-[#404040] transition-all cursor-pointer shrink-0 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
             <span>{isThai ? 'ย้อนกลับ' : 'Back'}</span>
@@ -1149,14 +1161,14 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-mono font-black text-xs sm:text-sm text-orange-400">
+              <span className="font-mono font-black text-xs sm:text-sm text-[#FB923C]">
                 {order.orderNumberFormatted}
               </span>
-              <span className="text-xs font-bold text-white truncate">
+              <span className="text-xs font-bold text-[#FFFFFF] truncate">
                 {order.customer?.name || 'Customer'}
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+            <p className="text-[10px] sm:text-[11px] text-[#A3A3A3] truncate">
               {deliveryAddress || (isThai ? 'ไม่ระบุที่อยู่' : 'No address')}
             </p>
           </div>
@@ -1177,8 +1189,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             }}
             className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-center transition-colors cursor-pointer ${
               isVoiceEnabled
-                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300'
-                : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white'
+                ? 'bg-[#064E3B] border-[#10B981] text-[#6EE7B7]'
+                : 'bg-[#262626] border-[#404040] text-[#A3A3A3] hover:text-[#FFFFFF]'
             }`}
             title={isThai ? 'เปิด/ปิดเสียงนำทาง' : 'Toggle voice guidance'}
           >
@@ -1188,7 +1200,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           {order.customer?.phone && order.customer.phone !== '-' && (
             <a
               href={`tel:${order.customer.phone}`}
-              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-transform active:scale-95"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-[#059669] hover:bg-[#10B981] text-[#FFFFFF] font-bold text-xs flex items-center gap-1.5 shadow-sm transition-transform active:scale-95"
               title={isThai ? 'โทรหาลูกค้า' : 'Call Customer'}
             >
               <Phone className="w-4 h-4" />
@@ -1204,22 +1216,22 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           id="rider-active-nav-banner"
           className={`px-3.5 py-2.5 shrink-0 z-20 shadow-lg flex items-center justify-between gap-3 transition-colors ${
             activeNavStep.arrived
-              ? 'bg-gradient-to-r from-orange-600 to-amber-600'
-              : 'bg-gradient-to-r from-emerald-700 to-emerald-600'
+              ? 'bg-[#D97706]'
+              : 'bg-[#047857]'
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-black/25 border border-white/20 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-[rgba(0,0,0,0.28)] border border-[rgba(255,255,255,0.25)] flex items-center justify-center shrink-0">
               {renderManeuverIcon(activeNavStep.maneuverType, activeNavStep.modifier)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 {!activeNavStep.arrived && activeNavStep.distanceMeters > 0 && (
-                  <span className="text-base sm:text-lg font-black text-white leading-none">
+                  <span className="text-base sm:text-lg font-black text-[#FFFFFF] leading-none">
                     {formatDistance(activeNavStep.distanceMeters, isThai)}
                   </span>
                 )}
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/25 text-emerald-100">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-[rgba(0,0,0,0.28)] text-[#D1FAE5]">
                   {activeNavStep.arrived
                     ? isThai
                       ? 'ถึงแล้ว'
@@ -1229,7 +1241,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                     : 'Auto Navigating'}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-extrabold text-white mt-0.5 line-clamp-2 leading-snug">
+              <p className="text-xs sm:text-sm font-extrabold text-[#FFFFFF] mt-0.5 line-clamp-2 leading-snug">
                 {activeNavStep.instruction}
               </p>
             </div>
@@ -1239,7 +1251,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             <button
               type="button"
               onClick={() => setShowStepsDrawer((prev) => !prev)}
-              className="px-2.5 py-1.5 rounded-xl bg-black/25 hover:bg-black/35 border border-white/20 text-[11px] font-black text-white flex items-center gap-1 cursor-pointer shrink-0"
+              className="px-2.5 py-1.5 rounded-xl bg-[rgba(0,0,0,0.28)] hover:bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.25)] text-[11px] font-black text-[#FFFFFF] flex items-center gap-1 cursor-pointer shrink-0"
             >
               <span>{isThai ? 'เส้นทาง' : 'Steps'}</span>
               {showStepsDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -1249,14 +1261,14 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       )}
 
       {/* 3. Fullscreen Auto-Sized Map Container */}
-      <div className="relative flex-1 w-full min-h-0 bg-neutral-900 overflow-hidden select-none">
+      <div className="relative flex-1 w-full min-h-0 bg-[#171717] overflow-hidden select-none">
         <div ref={mapContainerRef} className="w-full h-full z-0" />
 
         {/* Status / Geocode Overlay */}
         <div className="absolute top-3 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
           {(isResolvingDest || isRouting) && (
-            <div className="bg-neutral-900/95 backdrop-blur-md px-3.5 py-2 rounded-full border border-orange-500/40 shadow-xl flex items-center gap-2 text-xs font-bold text-orange-300 pointer-events-auto">
-              <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
+            <div className="bg-[#171717] px-3.5 py-2 rounded-full border border-[#F97316] shadow-xl flex items-center gap-2 text-xs font-bold text-[#FDBA74] pointer-events-auto">
+              <Loader2 className="w-4 h-4 animate-spin text-[#FB923C]" />
               <span>
                 {isResolvingDest
                   ? isThai
@@ -1271,7 +1283,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
           {/* Manual Destination Pin Drop Instruction */}
           {isManualPinMode && (
-            <div className="bg-orange-600/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-orange-300/60 shadow-2xl flex items-center justify-between gap-2 text-xs font-extrabold text-white pointer-events-auto">
+            <div className="bg-[#EA580C] px-3.5 py-2 rounded-2xl border border-[#FDBA74] shadow-2xl flex items-center justify-between gap-2 text-xs font-extrabold text-[#FFFFFF] pointer-events-auto">
               <div className="flex items-center gap-2">
                 <Crosshair className="w-4 h-4 shrink-0" />
                 <span>
@@ -1283,7 +1295,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsManualPinMode(false)}
-                className="px-2 py-0.5 rounded-lg bg-black/30 hover:bg-black/45 text-[11px] font-bold cursor-pointer shrink-0"
+                className="px-2 py-0.5 rounded-lg bg-[#0A0A0A] text-[#FFFFFF] text-[11px] font-bold cursor-pointer shrink-0"
               >
                 {isThai ? 'ยกเลิก' : 'Cancel'}
               </button>
@@ -1292,9 +1304,9 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
           {/* Origin GPS Status / iOS Precise Location Alert + Retry */}
           {!isResolvingDest && !isRouting && originSource !== 'gps' && (
-            <div className="max-w-md bg-neutral-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-amber-500/40 shadow-lg text-[11px] font-semibold text-neutral-200 flex items-center justify-between gap-2 pointer-events-auto">
+            <div className="max-w-md bg-[#171717] px-3 py-2 rounded-2xl border border-[#F59E0B] shadow-lg text-[11px] font-semibold text-[#E5E5E5] flex items-center justify-between gap-2 pointer-events-auto">
               <div className="flex items-start gap-1.5 min-w-0">
-                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <MapPin className="w-3.5 h-3.5 text-[#FBBF24] shrink-0 mt-0.5" />
                 <span className="leading-snug">
                   {gpsErrorMsg
                     ? gpsErrorMsg
@@ -1311,7 +1323,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                 type="button"
                 onClick={handleRetryGps}
                 disabled={isRetryingGps}
-                className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-black text-[11px] flex items-center gap-1 shrink-0 cursor-pointer"
+                className="px-2.5 py-1 rounded-xl bg-[#2563EB] hover:bg-[#3B82F6] disabled:opacity-60 text-[#FFFFFF] font-black text-[11px] flex items-center gap-1 shrink-0 cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${isRetryingGps ? 'animate-spin' : ''}`} />
                 <span>{isThai ? 'จับ GPS' : 'Retry'}</span>
@@ -1321,7 +1333,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
           {/* Low-accuracy warning if GPS fixed > 200m (common before iOS satellite lock) */}
           {originSource === 'gps' && originAccuracyMeters !== null && originAccuracyMeters > 200 && (
-            <div className="bg-amber-950/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-amber-500/50 shadow-lg text-[11px] font-bold text-amber-200 flex items-center gap-2 pointer-events-auto">
+            <div className="bg-[#451A03] px-3 py-1.5 rounded-full border border-[#F59E0B] shadow-lg text-[11px] font-bold text-[#FDE68A] flex items-center gap-2 pointer-events-auto">
               <span>
                 {isThai
                   ? `⚠️ สัญญาณ GPS ยังคลาดเคลื่อน (±${originAccuracyMeters} ม.)`
@@ -1331,7 +1343,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                 type="button"
                 onClick={handleRetryGps}
                 disabled={isRetryingGps}
-                className="underline font-black text-white cursor-pointer"
+                className="underline font-black text-[#FFFFFF] cursor-pointer"
               >
                 {isThai ? 'จับใหม่' : 'Refine'}
               </button>
@@ -1340,9 +1352,9 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
           {/* Geocode Not Found Manual Search Bar */}
           {geocodeFailed && !isResolvingDest && (
-            <div className="w-full max-w-md bg-neutral-900/95 backdrop-blur-md p-3 rounded-2xl border border-amber-500/50 shadow-2xl space-y-2 pointer-events-auto">
-              <div className="flex items-start gap-2 text-xs text-amber-300">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+            <div className="w-full max-w-md bg-[#171717] p-3 rounded-2xl border border-[#F59E0B] shadow-2xl space-y-2 pointer-events-auto">
+              <div className="flex items-start gap-2 text-xs text-[#FCD34D]">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#FBBF24]" />
                 <span>
                   {isThai
                     ? 'ไม่พบพิกัดอัตโนมัติจากที่อยู่เต็ม ลองค้นหาชื่อถนน/ซอย หรือกดปุ่มปรับหมุดปลายทางบนแผนที่'
@@ -1355,11 +1367,11 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                   value={manualSearchText}
                   onChange={(e) => setManualSearchText(e.target.value)}
                   placeholder={isThai ? 'พิมพ์ชื่อถนน / ซอย / สถานที่ใกล้เคียง...' : 'Search street / landmark...'}
-                  className="flex-1 min-w-0 bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-neutral-400 focus:outline-none focus:border-orange-500"
+                  className="flex-1 min-w-0 bg-[#262626] border border-[#404040] rounded-xl px-3 py-1.5 text-xs text-[#FFFFFF] placeholder-[#A3A3A3] focus:outline-none focus:border-[#F97316]"
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-neutral-950 font-black text-xs flex items-center gap-1 cursor-pointer shrink-0"
+                  className="px-3 py-1.5 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-[#0A0A0A] font-black text-xs flex items-center gap-1 cursor-pointer shrink-0"
                 >
                   <Search className="w-3.5 h-3.5" />
                   <span>{isThai ? 'ค้นหา' : 'Search'}</span>
@@ -1376,7 +1388,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
               type="button"
               id="btn-rider-recenter-nav"
               onClick={handleResumeNavigation}
-              className="px-3.5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs shadow-2xl border border-white/25 flex items-center gap-2 cursor-pointer transition-all"
+              className="px-3.5 py-2.5 rounded-full bg-[#2563EB] hover:bg-[#3B82F6] active:scale-95 text-[#FFFFFF] font-black text-xs shadow-2xl border border-[#93C5FD] flex items-center gap-2 cursor-pointer transition-all"
             >
               <Compass className="w-4 h-4" />
               <span>{isThai ? 'กลับสู่การนำทาง' : 'Recenter'}</span>
@@ -1395,8 +1407,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             }}
             className={`w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
               isManualPinMode
-                ? 'bg-orange-500 border-orange-300 text-neutral-950'
-                : 'bg-neutral-900/95 hover:bg-neutral-800 border-neutral-700 text-amber-300'
+                ? 'bg-[#F97316] border-[#FDBA74] text-[#0A0A0A]'
+                : 'bg-[#171717] hover:bg-[#262626] border-[#404040] text-[#FCD34D]'
             }`}
             title={isThai ? 'ปรับหมุดปลายทางบนแผนที่' : 'Adjust Destination Pin'}
           >
@@ -1407,7 +1419,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           <button
             type="button"
             onClick={handleViewFullRoute}
-            className="w-11 h-11 rounded-2xl bg-neutral-900/95 hover:bg-neutral-800 active:scale-95 text-orange-400 shadow-xl border border-neutral-700 flex items-center justify-center transition-all cursor-pointer"
+            className="w-11 h-11 rounded-2xl bg-[#171717] hover:bg-[#262626] active:scale-95 text-[#FB923C] shadow-xl border border-[#404040] flex items-center justify-center transition-all cursor-pointer"
             title={isThai ? 'ดูภาพรวมเส้นทางทั้งหมด' : 'Route Overview'}
           >
             <Route className="w-5 h-5" />
@@ -1419,8 +1431,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             onClick={handleResumeNavigation}
             className={`w-11 h-11 rounded-2xl shadow-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
               isAutoFollow
-                ? 'bg-blue-600 border-blue-400 text-white'
-                : 'bg-neutral-900/95 hover:bg-neutral-800 border-neutral-700 text-blue-400'
+                ? 'bg-[#2563EB] border-[#60A5FA] text-[#FFFFFF]'
+                : 'bg-[#171717] hover:bg-[#262626] border-[#404040] text-[#60A5FA]'
             }`}
             title={isThai ? 'ติดตามตำแหน่งนำทางของฉัน' : 'Follow My GPS'}
           >
@@ -1428,14 +1440,14 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           </button>
 
           {/* Zoom Controls */}
-          <div className="bg-neutral-900/95 rounded-2xl shadow-xl border border-neutral-700 overflow-hidden flex flex-col">
+          <div className="bg-[#171717] rounded-2xl shadow-xl border border-[#404040] overflow-hidden flex flex-col">
             <button
               type="button"
               onClick={() => {
                 setIsAutoFollow(false);
                 mapInstanceRef.current?.zoomIn();
               }}
-              className="w-11 h-10 hover:bg-neutral-800 active:bg-neutral-700 text-white flex items-center justify-center border-b border-neutral-800 transition-colors cursor-pointer"
+              className="w-11 h-10 hover:bg-[#262626] active:bg-[#404040] text-[#FFFFFF] flex items-center justify-center border-b border-[#262626] transition-colors cursor-pointer"
               title="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
@@ -1446,7 +1458,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                 setIsAutoFollow(false);
                 mapInstanceRef.current?.zoomOut();
               }}
-              className="w-11 h-10 hover:bg-neutral-800 active:bg-neutral-700 text-white flex items-center justify-center transition-colors cursor-pointer"
+              className="w-11 h-10 hover:bg-[#262626] active:bg-[#404040] text-[#FFFFFF] flex items-center justify-center transition-colors cursor-pointer"
               title="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
@@ -1456,21 +1468,21 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       </div>
 
       {/* 4. Bottom Google-Maps-Style Navigation ETA & Actions Footer */}
-      <footer className="bg-neutral-900 border-t border-neutral-800 px-3 sm:px-4 py-3 space-y-2.5 shrink-0 z-30 shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
+      <footer className="bg-[#171717] border-t border-[#262626] px-3 sm:px-4 py-3 space-y-2.5 shrink-0 z-30 shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
         {/* Collapsible Turn-by-Turn Route Directions */}
         {showStepsDrawer && routeSteps.length > 0 && (
-          <div className="max-h-40 overflow-y-auto bg-neutral-950 rounded-2xl border border-neutral-800 p-2.5 space-y-1.5 text-xs">
+          <div className="max-h-40 overflow-y-auto bg-[#0A0A0A] rounded-2xl border border-[#262626] p-2.5 space-y-1.5 text-xs">
             {routeSteps.map((step, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between gap-2 py-1 border-b border-neutral-800/60 last:border-0"
+                className="flex items-center justify-between gap-2 py-1 border-b border-[#262626] last:border-0"
               >
-                <span className="text-neutral-200 font-medium">
-                  <span className="text-orange-400 font-mono font-bold mr-1.5">{idx + 1}.</span>
+                <span className="text-[#E5E5E5] font-medium">
+                  <span className="text-[#FB923C] font-mono font-bold mr-1.5">{idx + 1}.</span>
                   {step.instruction}
                 </span>
                 {step.distanceMeters > 0 && (
-                  <span className="text-[11px] font-mono text-neutral-400 shrink-0">
+                  <span className="text-[11px] font-mono text-[#A3A3A3] shrink-0">
                     {formatDistance(step.distanceMeters, isThai)}
                   </span>
                 )}
@@ -1482,7 +1494,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
         {/* Prominent ETA / Distance Row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="px-2.5 py-1.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 shrink-0 text-center">
+            <div className="px-2.5 py-1.5 rounded-xl bg-[#064E3B] border border-[#10B981] text-[#6EE7B7] shrink-0 text-center">
               <span className="text-sm sm:text-base font-black block leading-none">
                 {routeDurationSeconds !== null ? formatDuration(routeDurationSeconds, isThai) : '...'}
               </span>
@@ -1491,11 +1503,11 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 {routeDistanceMeters !== null ? (
-                  <span className="text-sm font-black text-white">
+                  <span className="text-sm font-black text-[#FFFFFF]">
                     {formatDistance(routeDistanceMeters, isThai)}
                   </span>
                 ) : (
-                  <span className="text-xs font-bold text-neutral-300">
+                  <span className="text-xs font-bold text-[#D4D4D4]">
                     {isResolvingDest
                       ? isThai
                         ? 'กำลังค้นหาปลายทาง...'
@@ -1506,24 +1518,24 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                   </span>
                 )}
                 {routeDurationSeconds !== null && (
-                  <span className="text-xs text-neutral-400 font-semibold">
+                  <span className="text-xs text-[#A3A3A3] font-semibold">
                     • {isThai ? 'ถึงประมาณ' : 'ETA'} {formatEtaClock(routeDurationSeconds, isThai)}
                   </span>
                 )}
                 {isStraightLineFallback && (
-                  <span className="text-[10px] text-amber-400 font-semibold">
+                  <span className="text-[10px] text-[#FBBF24] font-semibold">
                     ({isThai ? 'ระยะทางตรง' : 'Direct line'})
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-neutral-400 truncate flex items-center gap-1.5">
+              <p className="text-[11px] text-[#A3A3A3] truncate flex items-center gap-1.5">
                 {originSource === 'gps' && originAccuracyMeters !== null && (
-                  <span className="text-blue-400 font-bold shrink-0">
+                  <span className="text-[#60A5FA] font-bold shrink-0">
                     GPS ±{originAccuracyMeters}{isThai ? 'ม.' : 'm'}
                   </span>
                 )}
                 {destSource && (
-                  <span className="text-orange-300 font-bold shrink-0">
+                  <span className="text-[#FDBA74] font-bold shrink-0">
                     {destSource === 'customer_gps'
                       ? isThai ? '• หมุดลูกค้า' : '• Customer GPS'
                       : destSource === 'maps_url'
@@ -1545,7 +1557,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           <button
             type="button"
             onClick={handleViewFullRoute}
-            className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-[11px] font-bold text-orange-300 shrink-0 cursor-pointer"
+            className="px-2.5 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#404040] text-[11px] font-bold text-[#FDBA74] shrink-0 cursor-pointer"
           >
             {isThai ? 'ภาพรวม' : 'Overview'}
           </button>
@@ -1556,7 +1568,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:scale-[0.99] border border-neutral-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+            className="py-2.5 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-[0.99] border border-[#404040] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{isThai ? 'ย้อนกลับหน้ารายการ' : 'Back to Orders'}</span>
@@ -1566,7 +1578,8 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             href={externalGoogleMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/25 transition-all cursor-pointer"
+            onClick={handleOpenExternalGoogleMaps}
+            className="py-2.5 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
           >
             <Navigation className="w-4 h-4" />
             <span>{isThai ? 'นำทางผ่าน Google Maps' : 'Open Google Maps'}</span>

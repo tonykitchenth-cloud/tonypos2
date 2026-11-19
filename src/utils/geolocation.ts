@@ -600,4 +600,58 @@ export function acquireAccurateGpsFix(options: AcquireGpsOptions = {}): Promise<
   });
 }
 
+/**
+ * Detects whether the app is running as an installed Home Screen / standalone PWA.
+ */
+export function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const iosStandalone = Boolean(
+      (window.navigator as Navigator & { standalone?: boolean }).standalone
+    );
+    const displayStandalone =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(display-mode: standalone)').matches;
+    return iosStandalone || displayStandalone;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Builds a universal cross-platform Google Maps URL (iOS & Android) that opens Google Maps
+ * directly in turn-by-turn driving navigation mode (&dir_action=navigate) using the device's live GPS as origin.
+ */
+export function buildGoogleMapsNavigationUrl(params: {
+  latitude?: unknown;
+  longitude?: unknown;
+  mapsUrl?: string;
+  address?: string;
+}): string {
+  const coords =
+    toLatLng(params.latitude, params.longitude) ||
+    extractCoordsFromMapsUrl(params.mapsUrl);
+
+  const cleanedAddress = (params.address || '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const destination = coords
+    ? `${coords.lat},${coords.lng}`
+    : encodeURIComponent(cleanedAddress || 'Bangkok, Thailand');
+
+  return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving&dir_action=navigate`;
+}
+
+/**
+ * On iOS Home Screen standalone PWAs (outside iframes), target="_blank" opens SFSafariViewController
+ * instead of handing off Universal Links straight to the Google Maps app. Top-level assign lets iOS
+ * launch the Google Maps app directly in turn-by-turn navigation mode.
+ */
+export function shouldUseTopLevelMapsHandoff(): boolean {
+  return isIOSDevice() && isStandalonePwa() && !isEmbeddedFrame();
+}
+
+
 

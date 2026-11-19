@@ -20,10 +20,15 @@ import {
   Map,
 } from 'lucide-react';
 import { RiderRouteMapModal } from './RiderRouteMapModal';
-import { toLatLng, extractCoordsFromMapsUrl } from '../../utils/geolocation';
+import {
+  toLatLng,
+  extractCoordsFromMapsUrl,
+  buildGoogleMapsNavigationUrl,
+  shouldUseTopLevelMapsHandoff,
+} from '../../utils/geolocation';
 
 export const RiderDashboard: React.FC = () => {
-  const { allOrders, language, t } = useRestaurant();
+  const { allOrders, language } = useRestaurant();
   const [activeTab, setActiveTab] = useState<'delivering' | 'completed'>('delivering');
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -66,6 +71,16 @@ export const RiderDashboard: React.FC = () => {
     }));
   };
 
+  const handleDirectGoogleMapsNav = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    navUrl: string
+  ) => {
+    if (shouldUseTopLevelMapsHandoff()) {
+      e.preventDefault();
+      window.location.assign(navUrl);
+    }
+  };
+
   // Handle Rider marking the order as Delivered
   const handleMarkAsDelivered = async (order: RestaurantOrder) => {
     if (submittingOrderId) return;
@@ -89,25 +104,25 @@ export const RiderDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 pb-16 selection:bg-orange-500/30">
-      {/* 1. Rider Top Banner / Header */}
-      <header className="sticky top-0 z-40 bg-neutral-900/95 backdrop-blur-md border-b border-neutral-800 px-4 py-3 shadow-lg">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#F5F5F5] pb-16">
+      {/* 1. Rider Top Banner / Header (Opaque solid surface prevents scroll overlap on iOS) */}
+      <header className="sticky top-0 z-40 bg-[#171717] border-b border-[#262626] px-4 py-3 shadow-lg">
         <div className="max-w-xl mx-auto flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center text-neutral-950 shadow-md shadow-orange-500/20 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#F97316] flex items-center justify-center text-[#0A0A0A] shadow-md shrink-0">
               <Bike className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-black uppercase tracking-wider text-orange-400">
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#FB923C]">
                   Rider Delivery View
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#34D399] bg-[#064E3B] px-2 py-0.5 rounded-full border border-[#10B981]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#34D399] animate-ping" />
                   Live Sync
                 </span>
               </div>
-              <h1 className="text-sm sm:text-lg font-black text-white leading-tight truncate">
+              <h1 className="text-sm sm:text-lg font-black text-[#FFFFFF] leading-tight truncate">
                 {language === 'th' ? "Tony's Kitchen - ส่งอาหาร" : "Tony's Kitchen - Rider"}
               </h1>
             </div>
@@ -115,10 +130,10 @@ export const RiderDashboard: React.FC = () => {
 
           <div className="flex items-center gap-2.5 shrink-0">
             <div className="text-right">
-              <span className="text-[10px] text-neutral-400 block font-semibold">
+              <span className="text-[10px] text-[#A3A3A3] block font-semibold">
                 {language === 'th' ? 'ออเดอร์ต้องส่ง' : 'Active'}
               </span>
-              <span className="text-xl font-mono font-black text-orange-400">
+              <span className="text-xl font-mono font-black text-[#FB923C]">
                 {activeDeliveryOrders.length}
               </span>
             </div>
@@ -130,15 +145,15 @@ export const RiderDashboard: React.FC = () => {
       <main className="max-w-xl mx-auto p-4 space-y-4">
         {/* Success Alert Banner when order completed */}
         {justCompletedOrderId && (
-          <div className="p-4 rounded-2xl bg-emerald-900/90 border border-emerald-500 text-white flex items-center gap-3 shadow-xl animate-fade-in">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-neutral-950 flex items-center justify-center shrink-0">
+          <div className="p-4 rounded-2xl bg-[#064E3B] border border-[#10B981] text-[#FFFFFF] flex items-center gap-3 shadow-xl">
+            <div className="w-10 h-10 rounded-xl bg-[#10B981] text-[#0A0A0A] flex items-center justify-center shrink-0">
               <Check className="w-6 h-6 stroke-[3]" />
             </div>
             <div>
-              <h4 className="text-sm font-extrabold text-white">
+              <h4 className="text-sm font-extrabold text-[#FFFFFF]">
                 {language === 'th' ? 'ส่งอาหารเรียบร้อยแล้ว!' : 'Order Delivered Successfully!'}
               </h4>
-              <p className="text-xs text-emerald-200">
+              <p className="text-xs text-[#A7F3D0]">
                 {language === 'th'
                   ? 'ระบบเปลี่ยนปุ่มที่หน้าร้านเป็น JOB DONE เรียบร้อยแล้ว'
                   : 'Shop dashboard has automatically updated to JOB DONE.'}
@@ -148,14 +163,14 @@ export const RiderDashboard: React.FC = () => {
         )}
 
         {/* Tab Switcher: Active vs Delivered Today */}
-        <div className="grid grid-cols-2 gap-2 bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800">
+        <div className="grid grid-cols-2 gap-2 bg-[#171717] p-1.5 rounded-2xl border border-[#262626]">
           <button
             type="button"
             onClick={() => setActiveTab('delivering')}
             className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'delivering'
-                ? 'bg-orange-500 text-neutral-950 shadow-md shadow-orange-500/20'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-[#F97316] text-[#0A0A0A] shadow-md'
+                : 'bg-[#171717] text-[#A3A3A3] hover:text-[#FFFFFF]'
             }`}
           >
             <Bike className="w-4 h-4" />
@@ -169,8 +184,8 @@ export const RiderDashboard: React.FC = () => {
             onClick={() => setActiveTab('completed')}
             className={`py-2.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'completed'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-[#059669] text-[#FFFFFF] shadow-md'
+                : 'bg-[#171717] text-[#A3A3A3] hover:text-[#FFFFFF]'
             }`}
           >
             <CheckCircle2 className="w-4 h-4" />
@@ -184,14 +199,14 @@ export const RiderDashboard: React.FC = () => {
         {activeTab === 'delivering' && (
           <div className="space-y-4">
             {activeDeliveryOrders.length === 0 ? (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-10 text-center space-y-3">
-                <div className="w-16 h-16 rounded-full bg-neutral-800 text-neutral-500 flex items-center justify-center mx-auto">
+              <div className="bg-[#171717] border border-[#262626] rounded-3xl p-10 text-center space-y-3">
+                <div className="w-16 h-16 rounded-full bg-[#262626] text-[#737373] flex items-center justify-center mx-auto">
                   <Bike className="w-8 h-8 opacity-60" />
                 </div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-[#FFFFFF]">
                   {language === 'th' ? 'ไม่มีออเดอร์ที่ต้องไปส่งในขณะนี้' : 'No active deliveries right now'}
                 </h3>
-                <p className="text-xs text-neutral-400 max-w-xs mx-auto">
+                <p className="text-xs text-[#A3A3A3] max-w-xs mx-auto">
                   {language === 'th'
                     ? 'เมื่อร้านค้ากด "On the way" ออเดอร์จะปรากฏที่หน้านี้โดยอัตโนมัติแบบ Real-Time'
                     : 'When the restaurant sets an order to "On the way", it will appear here instantly.'}
@@ -207,49 +222,62 @@ export const RiderDashboard: React.FC = () => {
                   minute: '2-digit',
                 });
 
+                const customerCoords =
+                  toLatLng(order.customer?.latitude, order.customer?.longitude) ||
+                  extractCoordsFromMapsUrl(order.customer?.mapsUrl);
+                const hasMapInfo = Boolean(
+                  order.customer?.deliveryAddress || order.customer?.mapsUrl || customerCoords
+                );
+                const googleNavUrl = buildGoogleMapsNavigationUrl({
+                  latitude: customerCoords?.lat,
+                  longitude: customerCoords?.lng,
+                  mapsUrl: order.customer?.mapsUrl,
+                  address: order.customer?.deliveryAddress,
+                });
+
                 return (
                   <div
                     key={order.id}
-                    className="bg-neutral-900 border-2 border-orange-500/40 rounded-3xl p-5 space-y-4 shadow-xl relative overflow-hidden"
+                    className="bg-[#171717] border-2 border-[#EA580C] rounded-3xl p-5 space-y-4 shadow-xl relative overflow-hidden"
                   >
                     {/* Top Status & Order Number Header */}
-                    <div className="flex items-start justify-between gap-3 border-b border-neutral-800/80 pb-3">
+                    <div className="flex items-start justify-between gap-3 border-b border-[#262626] pb-3">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xl sm:text-2xl font-black text-orange-400 tracking-tight">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xl sm:text-2xl font-black text-[#FB923C] tracking-tight">
                             {order.orderNumberFormatted}
                           </span>
-                          <span className="px-2.5 py-0.5 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-black uppercase">
+                          <span className="px-2.5 py-0.5 rounded-lg bg-[#431407] text-[#FB923C] border border-[#EA580C] text-xs font-black uppercase">
                             {order.status === 'on_the_way'
                               ? (language === 'th' ? 'กำลังเดินทางไปส่ง' : 'On the way')
                               : (language === 'th' ? 'เตรียมจัดส่ง' : 'Ready for delivery')}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400 font-mono mt-0.5 block flex items-center gap-1">
+                        <span className="text-[11px] text-[#A3A3A3] font-mono mt-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           <span>{language === 'th' ? 'รับออเดอร์เมื่อ' : 'Ordered at'} {formattedTime}</span>
                         </span>
                       </div>
 
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold uppercase text-neutral-400 block">
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] font-bold uppercase text-[#A3A3A3] block">
                           {language === 'th' ? 'ยอดรวม' : 'Total'}
                         </span>
-                        <span className="font-mono text-xl font-black text-white">
+                        <span className="font-mono text-xl font-black text-[#FFFFFF]">
                           ฿{order.total.toLocaleString()}
                         </span>
                       </div>
                     </div>
 
                     {/* Customer Info Card: Name, Call, Address, Maps */}
-                    <div className="space-y-3 bg-neutral-950/70 p-4 rounded-2xl border border-neutral-800">
+                    <div className="space-y-3 bg-[#0F0F0F] p-4 rounded-2xl border border-[#262626]">
                       {/* Customer Name & Phone Call Button */}
                       <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase text-neutral-500 block">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold uppercase text-[#A3A3A3] block">
                             {language === 'th' ? 'ลูกค้าผู้รับ' : 'Customer'}
                           </span>
-                          <h3 className="text-base sm:text-lg font-black text-white">
+                          <h3 className="text-base sm:text-lg font-black text-[#FFFFFF] truncate">
                             {order.customer?.name || 'Customer'}
                           </h3>
                         </div>
@@ -257,7 +285,7 @@ export const RiderDashboard: React.FC = () => {
                         {order.customer?.phone && order.customer.phone !== '-' && (
                           <a
                             href={`tel:${order.customer.phone}`}
-                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-md shadow-emerald-600/20 transition-transform active:scale-95"
+                            className="px-4 py-2.5 rounded-xl bg-[#059669] hover:bg-[#10B981] text-[#FFFFFF] font-extrabold text-xs flex items-center gap-2 shadow-md transition-transform active:scale-95 shrink-0"
                           >
                             <Phone className="w-4 h-4 stroke-[2.5]" />
                             <span>{language === 'th' ? 'โทรหาลูกค้า' : 'Call'}</span>
@@ -265,15 +293,15 @@ export const RiderDashboard: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Delivery Address & Google Maps Navigation Button */}
-                      <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+                      {/* Delivery Address & Google Maps Auto-Navigation */}
+                      <div className="pt-2 border-t border-[#262626] space-y-2">
                         <div className="flex items-start gap-2">
-                          <MapPin className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-                          <div className="text-xs text-neutral-200">
-                            <span className="font-bold text-white block">
+                          <MapPin className="w-4 h-4 text-[#FB923C] shrink-0 mt-0.5" />
+                          <div className="text-xs text-[#E5E5E5]">
+                            <span className="font-bold text-[#FFFFFF] block">
                               {language === 'th' ? 'ที่อยู่จัดส่ง:' : 'Delivery Address:'}
                             </span>
-                            <p className="mt-0.5 leading-relaxed font-medium">
+                            <p className="mt-0.5 leading-relaxed font-medium text-[#E5E5E5]">
                               {order.customer?.deliveryAddress || (language === 'th' ? 'ไม่ระบุที่อยู่ชัดเจน' : 'No address specified')}
                             </p>
                           </div>
@@ -281,103 +309,111 @@ export const RiderDashboard: React.FC = () => {
 
                         {/* Note to Rider if any */}
                         {order.customer?.notes && (
-                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                          <div className="p-2.5 rounded-xl bg-[#451A03] border border-[#D97706] text-xs text-[#FDE68A]">
                             <span className="font-bold">{language === 'th' ? 'หมายเหตุจากลูกค้า: ' : 'Customer Note: '}</span>
                             {order.customer.notes}
                           </div>
                         )}
 
-                        {/* 1-Tap Google Maps & In-App Map with Exact GPS Pin */}
-                        {(() => {
-                          const customerCoords =
-                            toLatLng(order.customer?.latitude, order.customer?.longitude) ||
-                            extractCoordsFromMapsUrl(order.customer?.mapsUrl);
-                          const hasMapInfo = Boolean(
-                            order.customer?.deliveryAddress || order.customer?.mapsUrl || customerCoords
-                          );
-                          if (!hasMapInfo) return null;
-
-                          return (
-                            <div className="space-y-2 pt-1">
-                              {customerCoords ? (
-                                <>
-                                  <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                                      <div className="min-w-0">
-                                        <span className="font-black text-white block">
-                                          {language === 'th' ? '📍 เชื่อมโยงหมุด GPS ตรงจุดจากลูกค้า' : '📍 Linked Exact Customer GPS Pin'}
-                                        </span>
-                                        <span className="font-mono text-[10px] text-emerald-400 block truncate">
-                                          {customerCoords.lat.toFixed(6)}, {customerCoords.lng.toFixed(6)}
-                                        </span>
-                                      </div>
+                        {/* 1-Tap Google Maps Auto-Navigation (iOS & Android) + In-App Map */}
+                        {hasMapInfo && (
+                          <div className="space-y-2 pt-1">
+                            {customerCoords ? (
+                              <>
+                                <div className="p-2.5 rounded-xl bg-[#064E3B] border border-[#10B981] text-[#D1FAE5] text-xs flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-[#34D399] animate-ping shrink-0" />
+                                    <div className="min-w-0">
+                                      <span className="font-black text-[#FFFFFF] block">
+                                        {language === 'th' ? '📍 เชื่อมโยงหมุด GPS ตรงจุดจากลูกค้า' : '📍 Linked Exact Customer GPS Pin'}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-[#6EE7B7] block truncate">
+                                        {customerCoords.lat.toFixed(6)}, {customerCoords.lng.toFixed(6)}
+                                      </span>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setMapModalOrder(order)}
-                                      className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-neutral-950 font-black text-[11px] flex items-center gap-1 shrink-0 transition-transform active:scale-95 cursor-pointer shadow-sm"
-                                    >
-                                      <Map className="w-3.5 h-3.5" />
-                                      <span>{language === 'th' ? 'ดูแผนที่' : 'View Map'}</span>
-                                    </button>
                                   </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMapModalOrder(order)}
+                                    className="px-2.5 py-1 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-[#0A0A0A] font-black text-[11px] flex items-center gap-1 shrink-0 transition-transform active:scale-95 cursor-pointer shadow-sm"
+                                  >
+                                    <Map className="w-3.5 h-3.5" />
+                                    <span>{language === 'th' ? 'ดูแผนที่' : 'View Map'}</span>
+                                  </button>
+                                </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {/* Direct Turn-by-Turn GPS Navigation Button */}
-                                    <a
-                                      href={`https://www.google.com/maps/dir/?api=1&destination=${customerCoords.lat},${customerCoords.lng}&travelmode=driving`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/30 transition-transform active:scale-95 cursor-pointer"
-                                    >
-                                      <Navigation className="w-4 h-4 text-white" />
-                                      <span>{language === 'th' ? '🚀 เริ่มนำทาง (Google Maps)' : 'Start GPS Navigation'}</span>
-                                      <ExternalLink className="w-3 h-3 opacity-70" />
-                                    </a>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {/* Direct Turn-by-Turn GPS Navigation Button */}
+                                  <a
+                                    id={`btn-rider-open-map-${order.id}`}
+                                    href={googleNavUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => handleDirectGoogleMapsNav(e, googleNavUrl)}
+                                    className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-[#FFFFFF] border border-[#60A5FA] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95 cursor-pointer"
+                                  >
+                                    <Navigation className="w-4 h-4 text-[#FFFFFF]" />
+                                    <span>{language === 'th' ? '🚀 เริ่มนำทาง (Google Maps)' : 'Start GPS Navigation'}</span>
+                                    <ExternalLink className="w-3 h-3 opacity-85" />
+                                  </a>
 
-                                    {/* Pin on Google Maps */}
-                                    <a
-                                      href={`https://www.google.com/maps/search/?api=1&query=${customerCoords.lat},${customerCoords.lng}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                                    >
-                                      <MapPin className="w-4 h-4 text-orange-400" />
-                                      <span>{language === 'th' ? 'ดูหมุดบน Google Maps' : 'View Pin on Google Maps'}</span>
-                                      <ExternalLink className="w-3 h-3 opacity-70" />
-                                    </a>
-                                  </div>
-                                </>
-                              ) : (
-                                /* Open fullscreen in-app route map with automatic address geocoding & Back button */
+                                  {/* Pin on Google Maps */}
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${customerCoords.lat},${customerCoords.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-3 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#404040] text-[#F5F5F5] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <MapPin className="w-4 h-4 text-[#FB923C]" />
+                                    <span>{language === 'th' ? 'ดูหมุดบน Google Maps' : 'View Pin on Google Maps'}</span>
+                                    <ExternalLink className="w-3 h-3 opacity-80" />
+                                  </a>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="space-y-2">
+                                {/* Primary Open Route Map -> Launches Google Maps Directly into Turn-by-Turn Navigation (iOS & Android) */}
+                                <a
+                                  id={`btn-rider-open-map-${order.id}`}
+                                  href={googleNavUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => handleDirectGoogleMapsNav(e, googleNavUrl)}
+                                  className="w-full py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                                >
+                                  <Navigation className="w-4 h-4 text-[#FFFFFF]" />
+                                  <span>{language === 'th' ? '🚀 เปิดนำทาง Google Maps ทันที' : 'Open Route Map (Auto Navigate)'}</span>
+                                  <ExternalLink className="w-3.5 h-3.5 opacity-85" />
+                                </a>
+
+                                {/* Secondary In-App Route Map Option (Preserves RiderRouteMapModal) */}
                                 <button
                                   type="button"
-                                  id={`btn-rider-open-map-${order.id}`}
+                                  id={`btn-rider-inapp-map-${order.id}`}
                                   onClick={() => setMapModalOrder(order)}
-                                  className="w-full py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 active:scale-[0.99] border border-blue-500/40 text-blue-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                                  className="w-full py-2 px-3 rounded-xl bg-[#262626] hover:bg-[#333333] border border-[#404040] text-[#E5E5E5] font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                                 >
-                                  <Navigation className="w-4 h-4 text-blue-400" />
-                                  <span>{language === 'th' ? 'เปิดแผนที่ค้นหาที่อยู่ (Google Maps)' : 'Open Route Map & Search Address'}</span>
+                                  <Map className="w-3.5 h-3.5 text-[#FB923C]" />
+                                  <span>{language === 'th' ? 'ดูแผนที่ในแอป / ปักหมุดเพิ่มเติม' : 'View In-App Map'}</span>
                                 </button>
-                              )}
-                            </div>
-                          );
-                        })()}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Payment Status Check: Cash to collect vs Paid */}
-                      <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-xs">
-                        <span className="text-neutral-400 font-semibold">
+                      <div className="pt-2 border-t border-[#262626] flex items-center justify-between gap-2 text-xs">
+                        <span className="text-[#A3A3A3] font-semibold">
                           {language === 'th' ? 'สถานะชำระเงิน:' : 'Payment:'}
                         </span>
                         {isPaid ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-950 border border-emerald-500/40 text-emerald-400 font-black flex items-center gap-1.5">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#064E3B] border border-[#10B981] text-[#6EE7B7] font-black flex items-center gap-1.5">
                             <CreditCard className="w-3.5 h-3.5" />
                             <span>{language === 'th' ? 'ชำระเงินเรียบร้อยแล้ว (ไม่ต้องเก็บเงิน)' : 'PAID (Do not collect)'}</span>
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-950 border border-amber-500/40 text-amber-300 font-black flex items-center gap-1.5 animate-pulse">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#451A03] border border-[#F59E0B] text-[#FDE68A] font-black flex items-center gap-1.5">
                             <Banknote className="w-3.5 h-3.5" />
                             <span>
                               {language === 'th'
@@ -390,14 +426,14 @@ export const RiderDashboard: React.FC = () => {
                     </div>
 
                     {/* Food Items Accordion (so rider knows what bags to carry) */}
-                    <div className="bg-neutral-950/40 border border-neutral-800 rounded-2xl overflow-hidden">
+                    <div className="bg-[#121212] border border-[#262626] rounded-2xl overflow-hidden">
                       <button
                         type="button"
                         onClick={() => toggleItemsExpand(order.id)}
-                        className="w-full p-3 flex items-center justify-between text-xs font-bold text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                        className="w-full p-3 flex items-center justify-between text-xs font-bold text-[#E5E5E5] hover:text-[#FFFFFF] transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
-                          <ShoppingBag className="w-4 h-4 text-orange-400" />
+                          <ShoppingBag className="w-4 h-4 text-[#FB923C]" />
                           <span>
                             {language === 'th' ? 'รายการอาหารในกล่อง' : 'Dishes in order'} ({order.items?.length || 0})
                           </span>
@@ -406,25 +442,25 @@ export const RiderDashboard: React.FC = () => {
                       </button>
 
                       {isExpanded && (
-                        <div className="p-3 pt-0 border-t border-neutral-800/60 space-y-2 text-xs">
+                        <div className="p-3 pt-2 border-t border-[#262626] space-y-2 text-xs bg-[#121212]">
                           {order.items?.map((item, i) => (
-                            <div key={i} className="flex items-start justify-between py-1 border-b border-neutral-800/40 last:border-0">
+                            <div key={i} className="flex items-start justify-between py-1 border-b border-[#262626] last:border-0">
                               <div>
-                                <span className="font-bold text-white">
+                                <span className="font-bold text-[#FFFFFF]">
                                   {language === 'th' ? (item.name.th || item.name.en) : item.name.en}
                                 </span>
                                 {item.selectedMainOption && (
-                                  <span className="text-[11px] text-orange-400 font-bold block">
+                                  <span className="text-[11px] text-[#FB923C] font-bold block">
                                     • {language === 'th' ? 'ตัวเลือกหลัก' : 'Main'}: {language === 'th' ? (item.selectedMainOption.name.th || item.selectedMainOption.name.en) : (item.selectedMainOption.name.en || item.selectedMainOption.name.th)}
                                   </span>
                                 )}
                                 {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                                  <span className="text-[11px] text-neutral-400 block">
+                                  <span className="text-[11px] text-[#A3A3A3] block">
                                     + {item.selectedModifiers.map((m) => language === 'th' ? m.optionName.th : m.optionName.en).join(', ')}
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono font-black text-orange-400 shrink-0 ml-2">
+                              <span className="font-mono font-black text-[#FB923C] shrink-0 ml-2">
                                 x{item.quantity}
                               </span>
                             </div>
@@ -433,28 +469,28 @@ export const RiderDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    {/* PRIMARY ACTION BUTTON: "ส่งเรียบร้อยแล้ว" */}
+                    {/* PRIMARY ACTION BUTTON: "ส่งเรียบร้อยแล้ว / Delivered (Job Done)" */}
                     <div className="pt-2">
                       <button
                         type="button"
                         id={`btn-rider-delivered-${order.id}`}
                         disabled={isSubmitting}
                         onClick={() => handleMarkAsDelivered(order)}
-                        className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 active:scale-[0.99] text-white font-black text-base sm:text-lg flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-600/30 border border-emerald-400/40 transition-all cursor-pointer"
+                        className="w-full py-4 px-6 rounded-2xl bg-[#059669] hover:bg-[#047857] disabled:bg-[#065F46] active:scale-[0.99] text-[#FFFFFF] font-black text-base sm:text-lg flex items-center justify-center gap-2.5 shadow-xl border-2 border-[#34D399] transition-all cursor-pointer"
                       >
                         {isSubmitting ? (
                           <>
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                            <span>{language === 'th' ? 'กำลังบันทึก...' : 'Updating...'}</span>
+                            <RefreshCw className="w-5 h-5 animate-spin text-[#FFFFFF]" />
+                            <span className="text-[#FFFFFF]">{language === 'th' ? 'กำลังบันทึก...' : 'Updating...'}</span>
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="w-6 h-6 stroke-[3]" />
-                            <span>{language === 'th' ? 'ส่งเรียบร้อยแล้ว' : 'Delivered (Job Done)'}</span>
+                            <CheckCircle2 className="w-6 h-6 stroke-[3] text-[#FFFFFF]" />
+                            <span className="text-[#FFFFFF]">{language === 'th' ? 'ส่งเรียบร้อยแล้ว' : 'Delivered (Job Done)'}</span>
                           </>
                         )}
                       </button>
-                      <p className="text-[11px] text-center text-neutral-400 mt-2">
+                      <p className="text-[11px] text-center text-[#A3A3A3] mt-2">
                         {language === 'th'
                           ? '💡 เมื่อกดปุ่มนี้ ระบบจะอัปเดตสถานะที่ร้านค้าเป็น JOB DONE ทันที'
                           : '💡 Clicking this updates the restaurant app status to JOB DONE immediately.'}
@@ -471,9 +507,9 @@ export const RiderDashboard: React.FC = () => {
         {activeTab === 'completed' && (
           <div className="space-y-3">
             {completedTodayOrders.length === 0 ? (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-10 text-center space-y-2">
-                <CheckCircle2 className="w-12 h-12 text-neutral-600 mx-auto" />
-                <h4 className="text-sm font-bold text-white">
+              <div className="bg-[#171717] border border-[#262626] rounded-3xl p-10 text-center space-y-2">
+                <CheckCircle2 className="w-12 h-12 text-[#525252] mx-auto" />
+                <h4 className="text-sm font-bold text-[#FFFFFF]">
                   {language === 'th' ? 'ยังไม่มีออเดอร์ที่ส่งเสร็จในวันนี้' : 'No completed deliveries today'}
                 </h4>
               </div>
@@ -485,26 +521,26 @@ export const RiderDashboard: React.FC = () => {
                 return (
                   <div
                     key={order.id}
-                    className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex items-center justify-between gap-3 text-xs"
+                    className="bg-[#171717] border border-[#262626] rounded-2xl p-4 flex items-center justify-between gap-3 text-xs"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-black text-emerald-400 text-sm">
+                        <span className="font-mono font-black text-[#34D399] text-sm">
                           {order.orderNumberFormatted}
                         </span>
-                        <span className="font-bold text-white">{order.customer?.name}</span>
+                        <span className="font-bold text-[#FFFFFF] truncate">{order.customer?.name}</span>
                       </div>
-                      <span className="text-[11px] text-neutral-400 block line-clamp-1">
+                      <span className="text-[11px] text-[#A3A3A3] block line-clamp-1">
                         📍 {order.customer?.deliveryAddress || '-'}
                       </span>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 font-black text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#064E3B] border border-[#10B981] text-[#6EE7B7] font-black text-[11px]">
                         <Check className="w-3.5 h-3.5 stroke-[3]" />
                         <span>JOB DONE</span>
                       </span>
-                      <span className="text-[10px] text-neutral-400 block mt-1">
+                      <span className="text-[10px] text-[#A3A3A3] block mt-1">
                         {completedTime}
                       </span>
                     </div>
@@ -528,3 +564,4 @@ export const RiderDashboard: React.FC = () => {
     </div>
   );
 };
+
