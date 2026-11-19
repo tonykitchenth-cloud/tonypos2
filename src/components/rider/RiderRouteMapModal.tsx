@@ -430,15 +430,23 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  // 1. Initialize Fullscreen Leaflet Map + Auto Resize Listeners
+  // 1. Initialize Fullscreen Leaflet Map + Lock Body Scroll + Auto Resize Listeners
   useEffect(() => {
     if (!isOpen) return;
+
+    const prevOverflow = typeof document !== 'undefined' ? document.body.style.overflow : '';
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = 'hidden';
+    }
 
     hasAutoZoomedNavRef.current = false;
     setIsNavigating(true);
     setIsAutoFollow(true);
     setIsManualPinMode(false);
     lastSpokenStepRef.current = '';
+
+    let resizeTimerA: ReturnType<typeof setTimeout> | null = null;
+    let resizeTimerB: ReturnType<typeof setTimeout> | null = null;
 
     const timer = setTimeout(() => {
       if (!mapContainerRef.current) return;
@@ -487,25 +495,29 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       mapInstanceRef.current = map;
       setIsMapReady(true);
 
-      // Immediately recalculate size for full-screen viewport
-      map.invalidateSize();
-      setTimeout(() => map.invalidateSize(), 200);
-    }, 80);
+      // Immediately recalculate size for full-screen viewport across mobile/tablet transitions
+      map.invalidateSize({ animate: false });
+      resizeTimerA = setTimeout(() => map.invalidateSize({ animate: false }), 180);
+      resizeTimerB = setTimeout(() => map.invalidateSize({ animate: false }), 480);
+    }, 60);
 
     const handleResize = () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
+        mapInstanceRef.current.invalidateSize({ animate: false });
       }
     };
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
 
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
       resizeObserver = new ResizeObserver(() => {
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
+          mapInstanceRef.current.invalidateSize({ animate: false });
         }
       });
       resizeObserver.observe(mapContainerRef.current);
@@ -513,8 +525,16 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
 
     return () => {
       clearTimeout(timer);
+      if (resizeTimerA) clearTimeout(resizeTimerA);
+      if (resizeTimerB) clearTimeout(resizeTimerB);
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = prevOverflow;
+      }
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
       if (resizeObserver) resizeObserver.disconnect();
 
       if (mapInstanceRef.current) {
@@ -660,53 +680,66 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
     }
 
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      const handleGeoPosition = (pos: GeolocationPosition) => {
+        if (cancelled) return;
+        const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
+        if (!pt) return;
+
+        const acc =
+          typeof pos.coords.accuracy === 'number' && Number.isFinite(pos.coords.accuracy)
+            ? Math.round(pos.coords.accuracy)
+            : 9999;
+        const ts = pos.timestamp || Date.now();
+
+        if (!shouldAcceptGpsUpdate(bestOriginGpsRef.current, { accuracy: acc, timestamp: ts })) {
+          return;
+        }
+
+        bestOriginGpsRef.current = { accuracy: acc, timestamp: ts };
+        originSourceRef.current = 'gps';
+        setOriginPoint({ lat: Number(pt.lat.toFixed(6)), lng: Number(pt.lng.toFixed(6)) });
+        setOriginSource('gps');
+        setOriginAccuracyMeters(acc);
+        setGpsErrorMsg(null);
+
+        if (
+          typeof pos.coords.heading === 'number' &&
+          Number.isFinite(pos.coords.heading) &&
+          pos.coords.heading >= 0 &&
+          pos.coords.heading <= 360
+        ) {
+          setRiderHeading(pos.coords.heading);
+        }
+      };
+
+      const handleGeoError = (err: GeolocationPositionError) => {
+        if (cancelled) return;
+        console.warn('Rider GPS watch error:', err);
+        setGpsErrorMsg(formatGeolocationError(err, isThai));
+        if (originSourceRef.current !== 'gps') {
+          if (storeFallbackRef.current) {
+            originSourceRef.current = 'store';
+            setOriginPoint(storeFallbackRef.current);
+            setOriginSource('store');
+          } else {
+            originSourceRef.current = 'unavailable';
+            setOriginSource('unavailable');
+          }
+        }
+      };
+
+      // Wake CoreLocation / Android GPS immediately, then keep continuous turn-by-turn watch active
+      try {
+        navigator.geolocation.getCurrentPosition(handleGeoPosition, () => {}, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 0,
+        });
+      } catch {}
+
       watchIdRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          if (cancelled) return;
-          const pt = toLatLng(pos.coords.latitude, pos.coords.longitude);
-          if (!pt) return;
-
-          const acc =
-            typeof pos.coords.accuracy === 'number' && Number.isFinite(pos.coords.accuracy)
-              ? Math.round(pos.coords.accuracy)
-              : 9999;
-          const ts = pos.timestamp || Date.now();
-
-          if (!shouldAcceptGpsUpdate(bestOriginGpsRef.current, { accuracy: acc, timestamp: ts })) {
-            return;
-          }
-
-          bestOriginGpsRef.current = { accuracy: acc, timestamp: ts };
-          originSourceRef.current = 'gps';
-          setOriginPoint({ lat: Number(pt.lat.toFixed(6)), lng: Number(pt.lng.toFixed(6)) });
-          setOriginSource('gps');
-          setOriginAccuracyMeters(acc);
-          setGpsErrorMsg(null);
-
-          if (
-            typeof pos.coords.heading === 'number' &&
-            Number.isFinite(pos.coords.heading) &&
-            pos.coords.heading >= 0 &&
-            pos.coords.heading <= 360
-          ) {
-            setRiderHeading(pos.coords.heading);
-          }
-        },
-        (err) => {
-          if (cancelled) return;
-          console.warn('Rider GPS watch error:', err);
-          setGpsErrorMsg(formatGeolocationError(err, isThai));
-          if (originSourceRef.current !== 'gps') {
-            if (storeFallbackRef.current) {
-              originSourceRef.current = 'store';
-              setOriginPoint(storeFallbackRef.current);
-              setOriginSource('store');
-            } else {
-              originSourceRef.current = 'unavailable';
-              setOriginSource('unavailable');
-            }
-          }
-        },
+        handleGeoPosition,
+        handleGeoError,
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
       );
     } else {
@@ -1137,7 +1170,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
   return (
     <div
       id="rider-fullscreen-route-modal"
-      className="fixed inset-0 z-60 w-screen h-[100dvh] bg-[#0A0A0A] text-[#FFFFFF] flex flex-col overflow-hidden"
+      className="fixed inset-0 z-[9999] w-full h-[100dvh] min-h-[100dvh] bg-[#0A0A0A] text-[#FFFFFF] flex flex-col overflow-hidden"
       style={{
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',
@@ -1153,7 +1186,7 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             className="px-3 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-95 text-[#FFFFFF] font-black text-xs flex items-center gap-1.5 border border-[#404040] transition-all cursor-pointer shrink-0 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>{isThai ? 'ย้อนกลับหน้า Rider' : 'Back to Rider'}</span>
+            <span>{isThai ? 'ย้อนกลับ' : 'Back'}</span>
           </button>
 
           <div className="min-w-0">
@@ -1208,28 +1241,30 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
       </header>
 
       {/* 2. Google-Maps-Style Green Auto-Navigation Turn-by-Turn Top Banner */}
-      {isNavigating && activeNavStep && (
+      {isNavigating && (
         <div
           id="rider-active-nav-banner"
           className={`px-3.5 py-2.5 shrink-0 z-20 shadow-lg flex items-center justify-between gap-3 transition-colors ${
-            activeNavStep.arrived
+            activeNavStep?.arrived
               ? 'bg-[#D97706]'
               : 'bg-[#047857]'
           }`}
         >
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-11 h-11 rounded-2xl bg-[rgba(0,0,0,0.28)] border border-[rgba(255,255,255,0.25)] flex items-center justify-center shrink-0">
-              {renderManeuverIcon(activeNavStep.maneuverType, activeNavStep.modifier)}
+              {activeNavStep
+                ? renderManeuverIcon(activeNavStep.maneuverType, activeNavStep.modifier)
+                : <Navigation className="w-6 h-6 text-[#FFFFFF] animate-pulse" />}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                {!activeNavStep.arrived && activeNavStep.distanceMeters > 0 && (
+                {activeNavStep && !activeNavStep.arrived && activeNavStep.distanceMeters > 0 && (
                   <span className="text-base sm:text-lg font-black text-[#FFFFFF] leading-none">
                     {formatDistance(activeNavStep.distanceMeters, isThai)}
                   </span>
                 )}
                 <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-[rgba(0,0,0,0.28)] text-[#D1FAE5]">
-                  {activeNavStep.arrived
+                  {activeNavStep?.arrived
                     ? isThai
                       ? 'ถึงแล้ว'
                       : 'Arrived'
@@ -1239,7 +1274,11 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-extrabold text-[#FFFFFF] mt-0.5 line-clamp-2 leading-snug">
-                {activeNavStep.instruction}
+                {activeNavStep
+                  ? activeNavStep.instruction
+                  : isThai
+                  ? 'กำลังเริ่มนำทางอัตโนมัติและจับพิกัดเส้นทาง...'
+                  : 'Starting automatic GPS turn-by-turn navigation...'}
               </p>
             </div>
           </div>
@@ -1551,59 +1590,71 @@ export const RiderRouteMapModal: React.FC<RiderRouteMapModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleViewFullRoute}
-            className="px-2.5 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#404040] text-[11px] font-bold text-[#FDBA74] shrink-0 cursor-pointer"
-          >
-            {isThai ? 'ภาพรวม' : 'Overview'}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleViewFullRoute}
+              className="px-2.5 py-1.5 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#404040] text-[11px] font-bold text-[#FDBA74] shrink-0 cursor-pointer"
+            >
+              {isThai ? 'ภาพรวม' : 'Overview'}
+            </button>
+            <a
+              href={externalGoogleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1.5 rounded-xl bg-[#1E3A8A] hover:bg-[#1D4ED8] border border-[#60A5FA] text-[11px] font-bold text-[#FFFFFF] flex items-center gap-1 shrink-0 cursor-pointer"
+              title={isThai ? 'เปิดในแอป Google Maps' : 'Open external Google Maps'}
+            >
+              <span>Google Maps</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </div>
 
-        {/* Bottom Action Buttons: Job Done + Back to Rider + Open External Google Maps */}
-        {onMarkDelivered && (
-          <button
-            type="button"
-            id="btn-rider-map-delivered"
-            disabled={isSubmittingDelivered}
-            onClick={() => onMarkDelivered(order)}
-            className="w-full py-3 px-4 rounded-xl bg-[#059669] hover:bg-[#047857] disabled:bg-[#065F46] active:scale-[0.99] border-2 border-[#34D399] text-[#FFFFFF] font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all"
-          >
-            {isSubmittingDelivered ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-[#FFFFFF]" />
-                <span>{isThai ? 'กำลังบันทึก...' : 'Updating...'}</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-5 h-5 stroke-[2.5] text-[#FFFFFF]" />
-                <span>{isThai ? 'ส่งเรียบร้อยแล้ว (Job Done)' : 'Delivered (Job Done)'}</span>
-              </>
-            )}
-          </button>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
+        {/* Paired Bottom Action Buttons: [ย้อนกลับหน้า Rider] + [จบงาน (Job Done)] side-by-side */}
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
             id="btn-rider-map-footer-back"
             onClick={onClose}
-            className="py-2.5 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] active:scale-[0.99] border border-[#404040] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+            className="py-3.5 px-3 rounded-2xl bg-[#262626] hover:bg-[#404040] active:scale-[0.99] border-2 border-[#525252] text-[#FFFFFF] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-md"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
             <span>{isThai ? 'ย้อนกลับหน้า Rider' : 'Back to Rider'}</span>
           </button>
 
-          <a
-            href={externalGoogleMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="py-2.5 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
-          >
-            <Navigation className="w-4 h-4" />
-            <span>{isThai ? 'นำทาง Google Maps' : 'Google Maps'}</span>
-            <ExternalLink className="w-3 h-3 opacity-80" />
-          </a>
+          {onMarkDelivered ? (
+            <button
+              type="button"
+              id="btn-rider-map-delivered"
+              disabled={isSubmittingDelivered}
+              onClick={() => onMarkDelivered(order)}
+              className="py-3.5 px-3 rounded-2xl bg-[#059669] hover:bg-[#047857] disabled:bg-[#065F46] active:scale-[0.99] border-2 border-[#34D399] text-[#FFFFFF] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg cursor-pointer transition-all"
+            >
+              {isSubmittingDelivered ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#FFFFFF]" />
+                  <span>{isThai ? 'กำลังบันทึก...' : 'Updating...'}</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] text-[#FFFFFF]" />
+                  <span>{isThai ? 'จบงาน (Job Done)' : 'Job Done'}</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <a
+              href={externalGoogleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-3.5 px-3 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border-2 border-[#60A5FA] text-[#FFFFFF] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+            >
+              <Navigation className="w-4 h-4" />
+              <span>{isThai ? 'นำทาง Google Maps' : 'Google Maps'}</span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+            </a>
+          )}
         </div>
       </footer>
     </div>

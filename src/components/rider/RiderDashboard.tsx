@@ -375,7 +375,7 @@ export const RiderDashboard: React.FC = () => {
                           </div>
                         )}
 
-                        {/* 1-Tap Google Maps Auto-Navigation (iOS & Android) + In-App Map */}
+                        {/* 1-Tap Fullscreen Auto-Navigation Map (with Back + Job Done paired at bottom) + External Google Maps */}
                         {hasMapInfo && (
                           <div className="space-y-2 pt-1">
                             {customerCoords ? (
@@ -392,70 +392,64 @@ export const RiderDashboard: React.FC = () => {
                                       </span>
                                     </div>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setMapModalOrder(order)}
-                                    className="px-2.5 py-1 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-[#0A0A0A] font-black text-[11px] flex items-center gap-1 shrink-0 transition-transform active:scale-95 cursor-pointer shadow-sm"
-                                  >
-                                    <Map className="w-3.5 h-3.5" />
-                                    <span>{language === 'th' ? 'ดูแผนที่' : 'View Map'}</span>
-                                  </button>
+                                  <span className="px-2 py-0.5 rounded-md bg-[#047857] text-[#D1FAE5] font-bold text-[10px] shrink-0">
+                                    GPS Ready
+                                  </span>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {/* Direct Turn-by-Turn GPS Navigation Button */}
-                                  <a
+                                  {/* Primary Fullscreen Auto-Navigation Map Modal */}
+                                  <button
+                                    type="button"
                                     id={`btn-rider-open-map-${order.id}`}
+                                    onClick={() => setMapModalOrder(order)}
+                                    className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-[#FFFFFF] border border-[#60A5FA] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95 cursor-pointer"
+                                  >
+                                    <Navigation className="w-4 h-4 text-[#FFFFFF]" />
+                                    <span>{language === 'th' ? '🚀 เปิดแผนที่ & เริ่มนำทาง' : 'Open Route Map & Navigate'}</span>
+                                  </button>
+
+                                  {/* External Google Maps App Turn-by-Turn */}
+                                  <a
+                                    id={`btn-rider-ext-map-${order.id}`}
                                     href={googleNavUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={() => handleDirectGoogleMapsNav(order.id)}
-                                    className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-[#FFFFFF] border border-[#60A5FA] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-transform active:scale-95 cursor-pointer"
-                                  >
-                                    <Navigation className="w-4 h-4 text-[#FFFFFF]" />
-                                    <span>{language === 'th' ? '🚀 เริ่มนำทาง (Google Maps)' : 'Start GPS Navigation'}</span>
-                                    <ExternalLink className="w-3 h-3 opacity-85" />
-                                  </a>
-
-                                  {/* Pin on Google Maps */}
-                                  <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${customerCoords.lat},${customerCoords.lng}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="py-3 px-3 rounded-xl bg-[#262626] hover:bg-[#404040] border border-[#404040] text-[#F5F5F5] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                                   >
                                     <MapPin className="w-4 h-4 text-[#FB923C]" />
-                                    <span>{language === 'th' ? 'ดูหมุดบน Google Maps' : 'View Pin on Google Maps'}</span>
+                                    <span>{language === 'th' ? 'เปิดแอป Google Maps' : 'Open Google Maps App'}</span>
                                     <ExternalLink className="w-3 h-3 opacity-80" />
                                   </a>
                                 </div>
                               </>
                             ) : (
                               <div className="space-y-2">
-                                {/* Primary Open Route Map -> Launches Google Maps Directly into Turn-by-Turn Navigation (iOS & Android) */}
-                                <a
+                                {/* Primary Button: Opens Fullscreen Auto-Resizing Map, Geocodes Address & Auto-Starts Turn-by-Turn Navigation */}
+                                <button
+                                  type="button"
                                   id={`btn-rider-open-map-${order.id}`}
+                                  onClick={() => setMapModalOrder(order)}
+                                  className="w-full py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                                >
+                                  <Navigation className="w-4 h-4 text-[#FFFFFF]" />
+                                  <span>{language === 'th' ? '🚀 เปิดแผนที่ค้นหาที่อยู่ & เริ่มนำทาง' : 'Open Route Map & Auto Navigate'}</span>
+                                </button>
+
+                                {/* Secondary External Google Maps Navigation Link */}
+                                <a
+                                  id={`btn-rider-ext-map-${order.id}`}
                                   href={googleNavUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={() => handleDirectGoogleMapsNav(order.id)}
-                                  className="w-full py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] border border-[#60A5FA] text-[#FFFFFF] font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
-                                >
-                                  <Navigation className="w-4 h-4 text-[#FFFFFF]" />
-                                  <span>{language === 'th' ? '🚀 เปิดนำทาง Google Maps ทันที' : 'Open Route Map (Auto Navigate)'}</span>
-                                  <ExternalLink className="w-3.5 h-3.5 opacity-85" />
-                                </a>
-
-                                {/* Secondary In-App Route Map Option (Preserves RiderRouteMapModal) */}
-                                <button
-                                  type="button"
-                                  id={`btn-rider-inapp-map-${order.id}`}
-                                  onClick={() => setMapModalOrder(order)}
                                   className="w-full py-2 px-3 rounded-xl bg-[#262626] hover:bg-[#333333] border border-[#404040] text-[#E5E5E5] font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                                 >
                                   <Map className="w-3.5 h-3.5 text-[#FB923C]" />
-                                  <span>{language === 'th' ? 'ดูแผนที่ในแอป / ปักหมุดเพิ่มเติม' : 'View In-App Map'}</span>
-                                </button>
+                                  <span>{language === 'th' ? 'เปิดในแอป Google Maps (ภายนอก)' : 'Open in External Google Maps'}</span>
+                                  <ExternalLink className="w-3 h-3 opacity-80" />
+                                </a>
                               </div>
                             )}
                           </div>
